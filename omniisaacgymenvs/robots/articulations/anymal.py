@@ -34,10 +34,15 @@ from omni.isaac.core.robots.robot import Robot
 from omni.isaac.core.utils.nucleus import get_assets_root_path
 from omni.isaac.core.utils.stage import add_reference_to_stage
 
-import numpy as np
-import torch
-
 from pxr import PhysxSchema
+from os import listdir
+
+
+def select_anymal(robots_dir):
+    anymals = [name for name in listdir(robots_dir) if 'anymal' in name]
+    anymal = anymals[int(input('Select an ANYmal:\n\n' + '\n'.join([f'{i}: {anymal}' for i, anymal in enumerate(anymals)]) + '\n'))]
+    return f'{robots_dir}/{anymal}/{anymal}_instanceable.usd'
+
 
 class Anymal(Robot):
     def __init__(
@@ -47,6 +52,7 @@ class Anymal(Robot):
         usd_path: Optional[str] = None,
         translation: Optional[np.ndarray] = None,
         orientation: Optional[np.ndarray] = None,
+        softfoot: bool = False
     ) -> None:
         """[summary]
         """
@@ -58,7 +64,10 @@ class Anymal(Robot):
             assets_root_path = get_assets_root_path()
             if assets_root_path is None:
                 carb.log_error("Could not find nucleus server with /Isaac folder")
-            self._usd_path = assets_root_path + "/Isaac/Robots/ANYbotics/anymal_instanceable.usd"
+            if not softfoot:
+                self._usd_path = assets_root_path + "/Isaac/Robots/ANYbotics/anymal_instanceable.usd"
+            else:
+                self._usd_path = select_anymal('/isaac-sim/OmniIsaacGymEnvs/omniisaacgymenvs/assets/robots')
         add_reference_to_stage(self._usd_path, prim_path)
 
         super().__init__(

@@ -27,7 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-from omni.isaac.gym.vec_env import VecEnvBase
+from omni.isaac.gym.vec_env.vec_env_base import VecEnvBase, SimulationApp, os, carb
 
 import torch
 import numpy as np
@@ -37,6 +37,40 @@ from datetime import datetime
 
 # VecEnv Wrapper for RL training
 class VecEnvRLGames(VecEnvBase):
+
+    def __init__(self, headless: bool, sim_device: int = 0, livestream: bool = False):
+
+        experience = ""
+        if headless:
+            experience = f'{os.environ["EXP_PATH"]}/omni.isaac.sim.python.gym.headless.kit'
+
+        if livestream:
+            experience = f'{os.environ["EXP_PATH"]}/omni.isaac.sim.python.kit'
+            headless = True
+
+        self._simulation_app = SimulationApp(
+            {"headless": headless, "physics_device": sim_device}, experience=experience
+        )
+        carb.settings.get_settings().set("/persistent/omnihydra/useSceneGraphInstancing", True)
+        self.sim_frame_count = 0
+
+        if livestream:
+            from omni.isaac.core.utils.extensions import enable_extension
+
+            # Default Livestream settings
+            self._simulation_app.set_setting("/app/window/drawMouse", True)
+            self._simulation_app.set_setting("/app/livestream/proto", "ws")
+            self._simulation_app.set_setting("/app/livestream/websocket/framerate_limit", 120)
+            self._simulation_app.set_setting("/ngx/enabled", False)
+
+            # Note: Only one livestream extension can be enabled at a time
+            # Enable Native Livestream extension
+            # Default App: Streaming Client from the Omniverse Launcher
+            enable_extension("omni.kit.livestream.native")
+
+            self._render = True
+        else:
+            self._render = not headless
 
     def _process_data(self):
         self._obs = torch.clamp(self._obs, -self._task.clip_obs, self._task.clip_obs).to(self._task.rl_device).clone()

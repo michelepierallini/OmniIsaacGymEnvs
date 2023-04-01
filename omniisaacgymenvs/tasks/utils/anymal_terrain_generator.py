@@ -77,7 +77,7 @@ class Terrain:
             end_y = self.border + (j + 1) * self.width_per_env_pixels
 
             terrain = SubTerrain("terrain",
-                              width=self.width_per_env_pixels,
+                              width=self.length_per_env_pixels,
                               length=self.width_per_env_pixels,
                               vertical_scale=self.vertical_scale,
                               horizontal_scale=self.horizontal_scale)
@@ -113,7 +113,7 @@ class Terrain:
         for j in range(num_terrains):
             for i in range(num_levels):
                 terrain = SubTerrain("terrain",
-                                    width=self.width_per_env_pixels,
+                                    width=self.length_per_env_pixels,
                                     length=self.width_per_env_pixels,
                                     vertical_scale=self.vertical_scale,
                                     horizontal_scale=self.horizontal_scale)
@@ -125,7 +125,7 @@ class Terrain:
                 discrete_obstacles_height = 0.025 + difficulty * 0.15
                 stepping_stones_size = 2 - 1.8 * difficulty
                 if choice < self.proportions[0]:
-                    if choice < 0.05:
+                    if choice < 0.5:
                         slope *= -1
                     pyramid_sloped_terrain(terrain, slope=slope, platform_size=3.)
                 elif choice < self.proportions[1]:

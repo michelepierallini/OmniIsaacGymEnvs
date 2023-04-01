@@ -90,7 +90,7 @@ def parse_hydra_configs(cfg: DictConfig):
     time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     headless = cfg.headless
-    env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id)
+    env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id, livestream=cfg.livestream)
 
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:

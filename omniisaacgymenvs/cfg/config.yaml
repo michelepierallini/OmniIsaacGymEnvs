@@ -38,6 +38,8 @@ checkpoint: ''
 
 # disables rendering
 headless: False
+# disables livestream
+livestream: False
 # timeout for MT script
 mt_timeout: 30
 
@@ -58,4 +60,3 @@ hydra:
   output_subdir: null
   run:
     dir: .
-
