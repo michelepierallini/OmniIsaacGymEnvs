@@ -59,15 +59,16 @@ class Anymal(Robot):
         
         self._usd_path = usd_path
         self._name = name
+        self._softfoot = softfoot
 
         if self._usd_path is None:
             assets_root_path = get_assets_root_path()
             if assets_root_path is None:
                 carb.log_error("Could not find nucleus server with /Isaac folder")
-            if not softfoot:
-                self._usd_path = assets_root_path + "/Isaac/Robots/ANYbotics/anymal_instanceable.usd"
-            else:
+            if self._softfoot:
                 self._usd_path = select_anymal('/isaac-sim/OmniIsaacGymEnvs/omniisaacgymenvs/assets/robots')
+            else:
+                self._usd_path = assets_root_path + "/Isaac/Robots/ANYbotics/anymal_instanceable.usd"
         add_reference_to_stage(self._usd_path, prim_path)
 
         super().__init__(
@@ -108,8 +109,13 @@ class Anymal(Robot):
 
     def prepare_contacts(self, stage, prim):
         for link_prim in prim.GetChildren():
-            if link_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI): 
-                if "_HIP" not in str(link_prim.GetPrimPath()):
+            if link_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
+                if self._softfoot:  # For SoftFoot do not apply ContactReportAPI neither to "_SHANK" and "_arch_link"
+                    components_wo_cr = ['_HIP']  # ['_HIP', '_SHANK', '_arch_link']
+                    condition = not any([link_type in str(link_prim.GetPrimPath()) for link_type in components_wo_cr])
+                else:
+                    condition = "_HIP" not in str(link_prim.GetPrimPath())
+                if condition:
                     rb = PhysxSchema.PhysxRigidBodyAPI.Get(stage, link_prim.GetPrimPath())
                     rb.CreateSleepThresholdAttr().Set(0)
                     cr_api = PhysxSchema.PhysxContactReportAPI.Apply(link_prim)

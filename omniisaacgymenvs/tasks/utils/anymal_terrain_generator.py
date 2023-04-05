@@ -131,8 +131,8 @@ class Terrain:
                 elif choice < self.proportions[1]:
                     if choice < 0.15:
                         slope *= -1
-                    pyramid_sloped_terrain(terrain, slope=slope, platform_size=3.)
-                    random_uniform_terrain(terrain, min_height=-0.1, max_height=0.1, step=0.025, downsampled_scale=0.2)
+                    pyramid_sloped_terrain(terrain, slope=0.0, platform_size=0.0)
+                    random_uniform_terrain(terrain, min_height=-0.1, max_height=0.1, step=0.005)
                 elif choice < self.proportions[3]:
                     if choice<self.proportions[2]:
                         step_height *= -1

@@ -50,6 +50,8 @@ class AnymalView(ArticulationView):
         )
         self._knees = RigidPrimView(prim_paths_expr="/World/envs/.*/anymal/.*_THIGH",
             name="knees_view", reset_xform_properties=False, track_contact_forces=track_contact_forces, prepare_contact_sensors=prepare_contact_sensors)
+        # self._soles = RigidPrimView(prim_paths_expr="/World/envs/.*/anymal/.*_roll_link",
+        #     name="soles_view", reset_xform_properties=False, track_contact_forces=track_contact_forces, prepare_contact_sensors=prepare_contact_sensors)
         self._base = RigidPrimView(prim_paths_expr="/World/envs/.*/anymal/base",
             name="base_view", reset_xform_properties=False, track_contact_forces=track_contact_forces, prepare_contact_sensors=prepare_contact_sensors)
 

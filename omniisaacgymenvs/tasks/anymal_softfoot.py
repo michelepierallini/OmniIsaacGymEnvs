@@ -31,6 +31,11 @@ from omniisaacgymenvs.robots.articulations.anymal import Anymal
 from omniisaacgymenvs.robots.articulations.views.anymal_view import AnymalView
 from omniisaacgymenvs.tasks.utils.usd_utils import set_drive
 
+from omniisaacgymenvs.tasks.utils.anymal_terrain_generator import Terrain
+from omniisaacgymenvs.utils.terrain_utils.terrain_utils import add_terrain_to_stage
+
+from omni.isaac.core.utils.stage import get_current_stage
+
 from omni.isaac.core.utils.prims import get_prim_at_path
 
 from omni.isaac.core.utils.torch.rotations import *
@@ -86,7 +91,7 @@ class AnymalSoftFootTask(RLTask):
         self.named_default_joint_angles = self._task_cfg["env"]["defaultJointAngles"]
 
         # other
-        self.dt = 1 / 60
+        self.dt = self._task_cfg["sim"]["dt"]  # 1 / 60
         self.max_episode_length_s = self._task_cfg["env"]["learn"]["episodeLength_s"]
         self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
         self.Kp = self._task_cfg["env"]["control"]["stiffness"]
@@ -113,8 +118,18 @@ class AnymalSoftFootTask(RLTask):
         self.all_current_targets = torch.zeros((self.num_envs, self.num_all_dof), dtype=torch.float, device=self.device, requires_grad=False)
 
         return
+    
+    def _create_trimesh(self):
+        self.terrain = Terrain(self._task_cfg["env"]["terrain"], num_robots=self.num_envs)
+        vertices = self.terrain.vertices
+        triangles = self.terrain.triangles
+        position = torch.tensor([-(self.terrain.env_length / 2 + self.terrain.border_size), -(self.terrain.env_width / 2 + self.terrain.border_size) , 0.0])
+        add_terrain_to_stage(stage=self._stage, vertices=vertices, triangles=triangles, position=position)  
+        # self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
 
     def set_up_scene(self, scene) -> None:
+        self._stage = get_current_stage()
+        self._create_trimesh()
         self.get_anymal()
         super().set_up_scene(scene)
         self._anymals = AnymalView(prim_paths_expr="/World/envs/.*/anymal", name="anymalview")
@@ -135,7 +150,7 @@ class AnymalSoftFootTask(RLTask):
                 joint_paths.append(f"{quadrant}_{component}/{quadrant}_{abbrev}FE")
             joint_paths.append(f"base/{quadrant}_HAA")
         for joint_path in joint_paths:
-            set_drive(f"{anymal.prim_path}/{joint_path}", "angular", "position", 0, 400, 40, 1000)
+            set_drive(f"{anymal.prim_path}/{joint_path}", "angular", "position", 0, self.Kp, self.Kd, 1000)
 
         self.default_dof_pos = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device, requires_grad=False)
         dof_names = anymal.dof_names
@@ -197,7 +212,7 @@ class AnymalSoftFootTask(RLTask):
         self.actions[:] = actions.clone().to(self._device)
         current_targets = self.current_targets + self.action_scale * self.actions * self.dt
         self.current_targets[:] = tensor_clamp(current_targets, self.anymal_dof_lower_limits, self.anymal_dof_upper_limits)
-        self.all_current_targets[:, self._active_dof_indices] = self.current_targets
+        self.all_current_targets[:, self._active_dof_indices] = self.current_targets[:]
         self._anymals.set_joint_position_targets(self.all_current_targets, indices)
 
     def reset_idx(self, env_ids):
@@ -210,9 +225,9 @@ class AnymalSoftFootTask(RLTask):
 
         # apply resets
         indices = env_ids.to(dtype=torch.int32)
-        self.all_dof_pos[env_ids][:, self._active_dof_indices] = dof_pos
+        self.all_dof_pos[env_ids][:, self._active_dof_indices] = dof_pos[:]
         self._anymals.set_joint_positions(self.all_dof_pos[env_ids], indices)
-        self.all_dof_vel[env_ids][:, self._active_dof_indices] = dof_vel
+        self.all_dof_vel[env_ids][:, self._active_dof_indices] = dof_vel[:]
         self._anymals.set_joint_velocities(self.all_dof_vel[env_ids], indices)
 
         self._anymals.set_world_poses(self.initial_root_pos[env_ids].clone(), self.initial_root_rot[env_ids].clone(), indices)
@@ -239,8 +254,8 @@ class AnymalSoftFootTask(RLTask):
         self.current_targets = self.default_dof_pos.clone()
 
         dof_limits = self._anymals.get_dof_limits()
-        self.anymal_dof_lower_limits = dof_limits[0, :, 0].to(device=self._device)[self._active_dof_indices]
-        self.anymal_dof_upper_limits = dof_limits[0, :, 1].to(device=self._device)[self._active_dof_indices]
+        self.anymal_dof_lower_limits = dof_limits[0, :, 0][self._active_dof_indices].to(device=self._device)
+        self.anymal_dof_upper_limits = dof_limits[0, :, 1][self._active_dof_indices].to(device=self._device)
 
         self.commands = torch.zeros(self._num_envs, 3, dtype=torch.float, device=self._device, requires_grad=False)
         self.commands_y = self.commands.view(self._num_envs, 3)[..., 1]
@@ -293,7 +308,7 @@ class AnymalSoftFootTask(RLTask):
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = dof_vel[:]
 
-        self.fallen_over = self._anymals.is_base_below_threshold(threshold=0.51, ground_heights=0.0)
+        self.fallen_over = self._anymals.is_base_below_threshold(threshold=0.51, ground_heights=0.0)  # 0.51
         total_reward[torch.nonzero(self.fallen_over)] = -1
         self.rew_buf[:] = total_reward.detach()
 
