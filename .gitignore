@@ -4,4 +4,5 @@ runs
 omniisaacgymenvs.egg-info/
 checkpoints
 omniisaacgymenvs/wandb
-omniisaacgymenvs/assets
+omniisaacgymenvs/assets/*
+omniisaacgymenvs/NvStreamer-LinuxEventTrace-*
