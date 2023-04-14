@@ -40,8 +40,12 @@ from os import listdir
 
 def select_anymal(robots_dir):
     anymals = [name for name in listdir(robots_dir) if 'anymal' in name]
-    anymal = anymals[int(input('Select an ANYmal:\n\n' + '\n'.join([f'{i}: {anymal}' for i, anymal in enumerate(anymals)]) + '\n'))]
-    return f'{robots_dir}/{anymal}/{anymal}_instanceable.usd'
+    if len(anymals):
+        anymal = anymals[int(input('Select an ANYmal:\n\n' + '\n'.join([f'{i}: {anymal}' for i, anymal in enumerate(anymals)]) + '\n')) if len(anymals) > 1 else 0]
+        return f'{robots_dir}/{anymal}/{anymal}_instanceable.usd'
+    else:
+        print('There are NO ANYmal models with SoftFoot!')
+        exit(0)
 
 
 class Anymal(Robot):
@@ -111,7 +115,7 @@ class Anymal(Robot):
         for link_prim in prim.GetChildren():
             if link_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
                 if self._softfoot:  # For SoftFoot do not apply ContactReportAPI neither to "_SHANK" and "_arch_link"
-                    components_wo_cr = ['_HIP']  # ['_HIP', '_SHANK', '_arch_link']
+                    components_wo_cr = ['_HIP', '_SHANK']  # ['_HIP', '_SHANK', '_arch_link']
                     condition = not any([link_type in str(link_prim.GetPrimPath()) for link_type in components_wo_cr])
                 else:
                     condition = "_HIP" not in str(link_prim.GetPrimPath())
