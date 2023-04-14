@@ -31,10 +31,9 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.tasks.allegro_hand import AllegroHandTask
     from omniisaacgymenvs.tasks.ant import AntLocomotionTask
     from omniisaacgymenvs.tasks.anymal import AnymalTask
-    from omniisaacgymenvs.tasks.anymal_perceptive import AnymalPerceptiveTask
-    from omniisaacgymenvs.tasks.anymal_softfoot import AnymalSoftFootTask
+    from omniisaacgymenvs.tasks.anymal_adaptive_feet import AnymalAdaptiveFeetTask
     from omniisaacgymenvs.tasks.anymal_terrain import AnymalTerrainTask
-    from omniisaacgymenvs.tasks.anymal_softfoot_terrain import AnymalSoftFootTerrainTask
+    from omniisaacgymenvs.tasks.anymal_adaptive_feet_terrain import AnymalAdaptiveFeetTerrainTask
     from omniisaacgymenvs.tasks.ball_balance import BallBalanceTask
     from omniisaacgymenvs.tasks.cartpole import CartpoleTask
     from omniisaacgymenvs.tasks.franka_cabinet import FrankaCabinetTask
@@ -49,10 +48,9 @@ def initialize_task(config, env, init_sim=True):
         "AllegroHand": AllegroHandTask,
         "Ant": AntLocomotionTask,
         "Anymal": AnymalTask,
-        "AnymalPerceptive": AnymalPerceptiveTask,
-        "AnymalSoftFoot": AnymalSoftFootTask,
+        "AnymalAdaptiveFeet": AnymalAdaptiveFeetTask,
         "AnymalTerrain": AnymalTerrainTask,
-        "AnymalSoftFootTerrain": AnymalSoftFootTerrainTask,
+        "AnymalAdaptiveFeetTerrain": AnymalAdaptiveFeetTerrainTask,
         "BallBalance": BallBalanceTask,
         "Cartpole": CartpoleTask,
         "FrankaCabinet": FrankaCabinetTask,

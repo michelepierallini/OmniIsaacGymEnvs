@@ -38,7 +38,7 @@ class Terrain:
     def __init__(self, cfg, num_robots) -> None:
         self.horizontal_scale = 0.1
         self.vertical_scale = 0.005
-        self.border_size = 20
+        self.border_size = 20  # 0
         self.num_per_env = 2
         self.env_length = cfg["mapLength"]
         self.env_width = cfg["mapWidth"]
@@ -125,14 +125,14 @@ class Terrain:
                 discrete_obstacles_height = 0.025 + difficulty * 0.15
                 stepping_stones_size = 2 - 1.8 * difficulty
                 if choice < self.proportions[0]:
-                    if choice < 0.5:
+                    if choice < 0.05:
                         slope *= -1
                     pyramid_sloped_terrain(terrain, slope=slope, platform_size=3.)
                 elif choice < self.proportions[1]:
                     if choice < 0.15:
                         slope *= -1
-                    pyramid_sloped_terrain(terrain, slope=0.0, platform_size=0.0)
-                    random_uniform_terrain(terrain, min_height=-0.1, max_height=0.1, step=0.005)
+                    pyramid_sloped_terrain(terrain, slope=slope, platform_size=3.)
+                    random_uniform_terrain(terrain, min_height=-0.1, max_height=0.1, step=0.025, downsampled_scale=0.2)
                 elif choice < self.proportions[3]:
                     if choice<self.proportions[2]:
                         step_height *= -1
