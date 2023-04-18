@@ -34,6 +34,7 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.tasks.anymal_adaptive_feet import AnymalAdaptiveFeetTask
     from omniisaacgymenvs.tasks.anymal_terrain import AnymalTerrainTask
     from omniisaacgymenvs.tasks.anymal_adaptive_feet_terrain import AnymalAdaptiveFeetTerrainTask
+    from omniisaacgymenvs.tasks.anymal_adaptive_feet_blind_terrain import AnymalAdaptiveFeetBlindTerrainTask
     from omniisaacgymenvs.tasks.ball_balance import BallBalanceTask
     from omniisaacgymenvs.tasks.cartpole import CartpoleTask
     from omniisaacgymenvs.tasks.franka_cabinet import FrankaCabinetTask
@@ -51,6 +52,7 @@ def initialize_task(config, env, init_sim=True):
         "AnymalAdaptiveFeet": AnymalAdaptiveFeetTask,
         "AnymalTerrain": AnymalTerrainTask,
         "AnymalAdaptiveFeetTerrain": AnymalAdaptiveFeetTerrainTask,
+        "AnymalAdaptiveFeetBlindTerrain": AnymalAdaptiveFeetBlindTerrainTask,
         "BallBalance": BallBalanceTask,
         "Cartpole": CartpoleTask,
         "FrankaCabinet": FrankaCabinetTask,

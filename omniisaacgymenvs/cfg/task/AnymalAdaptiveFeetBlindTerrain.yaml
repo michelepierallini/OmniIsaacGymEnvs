@@ -1,4 +1,4 @@
-name: AnymalAdaptiveFeetTerrain
+name: AnymalAdaptiveFeetBlindTerrain
 
 physics_engine: ${..physics_engine}
 
