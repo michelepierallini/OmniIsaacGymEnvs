@@ -114,7 +114,7 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
             self.rew_scales[key] *= self.dt
 
         self._num_envs = self._task_cfg["env"]["numEnvs"]
-        self._num_observations = 64  # 188
+        self._num_observations = 64  # 188(perceptive_12dof)    64(flatfoot)    72(3dof_flatfoot)
         self._num_actions = 12
 
         self._task_cfg["sim"]["default_physics_material"]["static_friction"] = self._task_cfg["env"]["terrain"]["staticFriction"]
@@ -143,7 +143,7 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
         self.feet_air_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_dof_vel = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device, requires_grad=False)
 
-        self.num_dof = 20
+        self.num_dof = 20  # 20(flatfoot)    24(3dof_flatfoot)
         self.all_torques = torch.zeros(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
 
         # self.height_points = self.init_height_points()
@@ -311,10 +311,10 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
     
     def refresh_dof_state_tensors(self):
-        self.all_dof_pos = self._anymals.get_joint_positions(clone=False)
-        self.all_dof_vel = self._anymals.get_joint_velocities(clone=False)
-        self.dof_pos = self.all_dof_pos[:, :12]
-        self.dof_vel = self.all_dof_vel[:, :12]
+        self.all_joint_pos = self._anymals.get_joint_positions(clone=False)
+        self.all_joint_vel = self._anymals.get_joint_velocities(clone=False)
+        self.dof_pos = self.all_joint_pos[:, :12]
+        self.dof_vel = self.all_joint_vel[:, :12]
     
     def refresh_body_state_tensors(self):
         self.base_pos, self.base_quat = self._anymals.get_world_poses(clone=False)
@@ -358,6 +358,9 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
             self.check_termination()
             self.get_states()
             self.calculate_metrics()
+            
+            # self.get_observations()
+            # self.reset_buf |= self.obs_buf.isnan().any(dim=1)
 
             env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
             if len(env_ids) > 0:
@@ -442,8 +445,10 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
                                     self.base_ang_vel  * self.ang_vel_scale,
                                     self.projected_gravity,
                                     self.commands[:, :3] * self.commands_scale,
-                                    self.all_dof_pos * self.dof_pos_scale,
-                                    self.all_dof_vel * self.dof_vel_scale,
+                                    # self.dof_pos * self.dof_pos_scale,
+                                    # self.dof_vel * self.dof_vel_scale,
+                                    self.all_joint_pos * self.dof_pos_scale,
+                                    self.all_joint_vel * self.dof_vel_scale,
                                     # heights,
                                     self.actions
                                     ),dim=-1)

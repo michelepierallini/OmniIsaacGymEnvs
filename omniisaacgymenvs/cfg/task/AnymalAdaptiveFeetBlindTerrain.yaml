@@ -139,7 +139,7 @@ sim:
     gpu_max_rigid_contact_count: 524288
     gpu_max_rigid_patch_count: 163840
     gpu_found_lost_pairs_capacity: 4194304
-    gpu_found_lost_aggregate_pairs_capacity: 142610432  # 33554432 142610432        201326592
+    gpu_found_lost_aggregate_pairs_capacity: 142626816  # 33554432(perceptive_12dof) 142610432(flatfoot) 142626816(3dof_flatfoot)
     gpu_total_aggregate_pairs_capacity: 4194304
     gpu_max_soft_body_contacts: 1048576
     gpu_max_particle_contacts: 1048576

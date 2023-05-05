@@ -143,7 +143,7 @@ class AnymalAdaptiveFeetTerrainTask(RLTask):
         self.feet_air_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_dof_vel = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device, requires_grad=False)
 
-        self.num_dof = 20
+        self.num_dof = 20  # 20(flatfoot)    24(3dof_flatfoot)
         self.all_torques = torch.zeros(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
 
         self.height_points = self.init_height_points()
