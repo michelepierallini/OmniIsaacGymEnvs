@@ -391,7 +391,4 @@ class SubTerrain:
         self.horizontal_scale = horizontal_scale
         self.width = width
         self.length = length
-        self.height_field_raw = np.zeros((self.width, self.length), dtype=np.int16)
-
-
-
+        self.height_field_raw = np.zeros((self.length, self.width), dtype=np.int16)

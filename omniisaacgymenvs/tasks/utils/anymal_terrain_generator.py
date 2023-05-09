@@ -77,10 +77,10 @@ class Terrain:
             end_y = self.border + (j + 1) * self.width_per_env_pixels
 
             terrain = SubTerrain("terrain",
-                              width=self.length_per_env_pixels,
-                              length=self.width_per_env_pixels,
-                              vertical_scale=self.vertical_scale,
-                              horizontal_scale=self.horizontal_scale)
+                                 width=self.width_per_env_pixels,
+                                 length=self.length_per_env_pixels,
+                                 vertical_scale=self.vertical_scale,
+                                 horizontal_scale=self.horizontal_scale)
             choice = np.random.uniform(0, 1)
             if choice < 0.1:
                 if np.random.choice([0, 1]):
@@ -113,10 +113,10 @@ class Terrain:
         for j in range(num_terrains):
             for i in range(num_levels):
                 terrain = SubTerrain("terrain",
-                                    width=self.length_per_env_pixels,
-                                    length=self.width_per_env_pixels,
-                                    vertical_scale=self.vertical_scale,
-                                    horizontal_scale=self.horizontal_scale)
+                                     width=self.width_per_env_pixels,
+                                     length=self.length_per_env_pixels,
+                                     vertical_scale=self.vertical_scale,
+                                     horizontal_scale=self.horizontal_scale)
                 difficulty = i / num_levels
                 choice = j / num_terrains
 
