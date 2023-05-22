@@ -142,7 +142,7 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
         self.feet_air_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
-        self.last_dof_vel = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.last_dof_vel = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device, requires_grad=False)
 
         self.all_torques = torch.zeros(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         self._max_stiff, self._max_damp = 41, 1.
@@ -245,6 +245,7 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
 
         self.all_dof_pos = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device)
         self.all_dof_vel = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device)
+        self.all_last_dof_vel = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device, requires_grad=False)
 
         self.base_pos = torch.zeros((self.num_envs, 3), dtype=torch.float, device=self.device)
         self.base_quat = torch.zeros((self.num_envs, 4), dtype=torch.float, device=self.device)
@@ -271,11 +272,8 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
 
         num_envs = len(env_ids)
 
-        positions_offset = torch_rand_float(0.5, 1.5, (num_envs, 12), device=self.device)
-        velocities = torch_rand_float(-0.1, 0.1, (num_envs, 12), device=self.device)
-
-        self.dof_pos[env_ids] = self.default_dof_pos[env_ids] * positions_offset
-        self.dof_vel[env_ids] = velocities
+        self.dof_pos[env_ids] = self.default_dof_pos[env_ids] * torch_rand_float(0.5, 1.5, (num_envs, 12), device=self.device)
+        self.dof_vel[env_ids] = torch_rand_float(-0.1, 0.1, (num_envs, 12), device=self.device)
 
         self.update_terrain_level(env_ids)
         self.base_pos[env_ids] = self.base_init_state[0:3]
@@ -305,7 +303,8 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
         self.damps[env_ids] = torch.rand((num_envs, 1), dtype=torch.float, device=self.device, requires_grad=False) * self._max_damp
 
         self.last_actions[env_ids] = 0.
-        self.last_dof_vel[env_ids] = 0.
+        # self.last_dof_vel[env_ids] = 0.
+        self.all_last_dof_vel[env_ids] = 0.
         self.feet_air_time[env_ids] = 0.
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
@@ -341,9 +340,10 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
     
     def _set_feet_joint_efforts(self):
         # self.all_torques[:, -4:] = torch.clip(- self.stiffs * self.all_dof_pos[:, -4:] - self.damps * self.all_dof_vel[:, -4:], -80., 0.)
-        front_soles_vel, back_soles_vel = self.all_dof_vel[:, -8::2],  self.all_dof_vel[:, -7::2]
-        self.all_torques[:, -8::2] = torch.clip(- self.stiffs * self.all_dof_pos[:, -8::2] - self.damps * front_soles_vel * (front_soles_vel > 0), -30., 0.)
-        self.all_torques[:, -7::2] = torch.clip(- self.stiffs * self.all_dof_pos[:, -7::2] - self.damps * back_soles_vel * (back_soles_vel < 0), 0., 30.)
+        if self.num_dof == 28:
+            front_soles_vel, back_soles_vel = self.all_dof_vel[:, -8::2],  self.all_dof_vel[:, -7::2]
+            self.all_torques[:, -8::2] = torch.clip(- self.stiffs * self.all_dof_pos[:, -8::2] - self.damps * front_soles_vel * (front_soles_vel > 0), -30., 0.)
+            self.all_torques[:, -7::2] = torch.clip(- self.stiffs * self.all_dof_pos[:, -7::2] - self.damps * back_soles_vel * (back_soles_vel < 0), 0., 30.)
 
     def pre_physics_step(self, actions):
         if not self._env._world.is_playing():
@@ -483,7 +483,8 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
                 self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
 
             self.last_actions[:] = self.actions[:]
-            self.last_dof_vel[:] = self.dof_vel[:]
+            # self.last_dof_vel[:] = self.dof_vel[:]
+            self.all_last_dof_vel[:] = self.all_dof_vel[:]
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
@@ -519,7 +520,8 @@ class AnymalAdaptiveFeetBlindTerrainTask(RLTask):
         rew_torque = torch.sum(torch.square(self.torques), dim=1) * self.rew_scales["torque"]
 
         # joint acc penalty
-        rew_joint_acc = torch.sum(torch.square(self.last_dof_vel - self.dof_vel), dim=1) * self.rew_scales["joint_acc"]
+        # rew_joint_acc = torch.sum(torch.square(self.last_dof_vel - self.dof_vel), dim=1) * self.rew_scales["joint_acc"]
+        rew_joint_acc = torch.sum(torch.square(self.all_last_dof_vel - self.all_dof_vel), dim=1) * self.rew_scales["joint_acc"]
 
         # fallen over penalty
         rew_fallen_over = self.has_fallen * self.rew_scales["fallen_over"]

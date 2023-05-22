@@ -70,13 +70,13 @@ env:
     angularVelocityXYRewardScale: -0.05
     angularVelocityZRewardScale: 0.5
     orientationRewardScale: -0.
-    torqueRewardScale: -0.00002 
+    torqueRewardScale: -0.00002
     jointAccRewardScale: -0.0005
-    baseHeightRewardScale: -0.0
+    baseHeightRewardScale: -0.01
     actionRateRewardScale: -0.01
     fallenOverRewardScale: -1.0
     # cosmetics
-    hipRewardScale: -0. #25
+    hipRewardScale: -0.25
 
     # normalization
     linearVelocityScale: 2.0
@@ -151,7 +151,7 @@ sim:
   anymal:
     # -1 to use default values
     override_usd_defaults: False
-    enable_self_collisions: False  # True
+    enable_self_collisions: True
     enable_gyroscopic_forces: False
     # also in stage params
     # per-actor
