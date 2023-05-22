@@ -25,7 +25,7 @@ env:
     slopeTreshold: 0.5
 
   baseInitState:
-    pos: [0.0, 0.0, 0.62] # x,y,z [m]
+    pos: [0.0, 0.0, 0.67] # x,y,z [m]
     rot: [1.0, 0.0, 0.0, 0.0] # w,x,y,z [quat]
     vLinear: [0.0, 0.0, 0.0]  # x,y,z [m/s]
     vAngular: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
@@ -151,7 +151,7 @@ sim:
   anymal:
     # -1 to use default values
     override_usd_defaults: False
-    enable_self_collisions: True
+    enable_self_collisions: False  # True
     enable_gyroscopic_forces: False
     # also in stage params
     # per-actor
