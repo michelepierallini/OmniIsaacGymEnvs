@@ -1,6 +1,6 @@
 from omniisaacgymenvs.tasks.base.rl_task import RLTask
-from omniisaacgymenvs.robots.articulations.anymal import Anymal
-from omniisaacgymenvs.robots.articulations.views.anymal_view import AnymalView
+from omniisaacgymenvs.robots.articulations.solo import Solo
+from omniisaacgymenvs.robots.articulations.views.solo_view import SoloView
 from omniisaacgymenvs.tasks.utils.terrain_jump import *
 from omniisaacgymenvs.utils.terrain_utils.terrain_utils import *
 
@@ -11,7 +11,9 @@ from omni.isaac.core.simulation_context import SimulationContext
 
 import numpy as np
 import torch
-import math
+# import math
+# import time
+# import csv
 
 
 from pxr import UsdPhysics, UsdLux
@@ -49,10 +51,17 @@ class SoloJumpTask(RLTask):
         self.rew_scales["fallen_over"] = self._task_cfg["env"]["learn"]["fallenOverRewardScale"]
         self.rew_scales["hasnt_flew"] = self._task_cfg["env"]["learn"]["hasntFlewRewardScale"]
         self.rew_scales["trajectory"] = self._task_cfg["env"]["learn"]["trajectoryRewardScale"]
-    
+        self.rew_scales["storage_height"] = self._task_cfg["env"]["learn"]["storageheightRewardScale"]   
+        self.rew_scales["velocity_storage"] = self._task_cfg["env"]["learn"]["storagevelocityRewardScale"]      
+        self.rew_scales["velocity_final"] = self._task_cfg["env"]["learn"]["velocityfinalReward"]   
+        self.rew_scales["fallen_over_final"] = self._task_cfg["env"]["learn"]["fallenOverFinalRewardScale"]       
         self.rew_scales["roll"] = self._task_cfg["env"]["learn"]["rollRewardScale"]
         self.rew_scales["termination"] = self._task_cfg["env"]["learn"]["TerminationRewardScale"]
 
+        self.rew_scales["velocity_x"] = self._task_cfg["env"]["learn"]["velocityXRewardScale"]
+        self.rew_scales["velocity_z"] = self._task_cfg["env"]["learn"]["velocityZRewardScale"]
+        self.rew_scales["time"] = self._task_cfg["env"]["learn"]["timeRewardScale"]
+        self.rew_scales["ground_forces"] = self._task_cfg["env"]["learn"]["ground_forcesRewardScale"]
 
         # base init state
         pos = self._task_cfg["env"]["baseInitState"]["pos"]
@@ -73,20 +82,34 @@ class SoloJumpTask(RLTask):
         self.Kp = self._task_cfg["env"]["control"]["stiffness"]
         self.Kd = self._task_cfg["env"]["control"]["damping"]
         self.curriculum = self._task_cfg["env"]["terrain"]["curriculum"]
+        self.first_height = self._task_cfg["env"]["terrain"]["first_height"]
         self.base_threshold = 0.2
         self.knee_threshold = 0.1
-        self.max_ground_time_s = 2 #sec
-        self.max_ground_time = int(self.max_ground_time_s/ self.dt + 0.5)
+        self.max_ground_time_s = 2.5 #sec   0.8
+        self.max_ground_time = int(self.max_ground_time_s/ self.dt + 0.5)  # self.dt
         self.flying_threshold = 1 # meters
-        
-   
+        self.robot_default_height = 0.66
+        self.base_init_state[2] += self.robot_default_height * 1.1
+        self._device = 'cuda:0'
+        self.count = 0
+        # with open(Evolution_Solo_Jump, 'w', newline="") as file:
+        #    writer = csv.writer(file)
+
 
         for key in self.rew_scales.keys():
             self.rew_scales[key] *= self.dt
 
         self._num_envs = self._task_cfg["env"]["numEnvs"]
-        self._num_observations = 189
+        self.first_landing = torch.zeros(self._num_envs, dtype=torch.int, device=self._device)
+        self.first_takeoff = torch.zeros(self._num_envs, dtype=torch.int, device=self._device)
+        self.not_evaluated = torch.zeros(self._num_envs, dtype=torch.int, device=self._device)
+        self.has_early_landed = torch.zeros(self._num_envs, dtype=torch.int, device=self._device)
+        self.first_landing_time = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self.jump_time = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._num_observations = 187
         self._num_actions = 12
+
+        self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self.device)
 
         self._task_cfg["sim"]["default_physics_material"]["static_friction"] = self._task_cfg["env"]["terrain"]["staticFriction"]
         self._task_cfg["sim"]["default_physics_material"]["dynamic_friction"] = self._task_cfg["env"]["terrain"]["dynamicFriction"]
@@ -104,8 +127,7 @@ class SoloJumpTask(RLTask):
         self.common_step_counter = 0
         self.extras = {}
         self.noise_scale_vec = self._get_noise_scale_vec(self._task_cfg)
-        self.commands = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False) # distance, yaw, height, type terrain
-        # self.commands_scale = torch.tensor([self.lin_vel_scale, self.lin_vel_scale, self.ang_vel_scale], device=self.device, requires_grad=False,)
+        self.commands = torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device, requires_grad=False) # distance, yaw, height, type terrain
         self.gravity_vec = torch.tensor(get_axis_params(-1., self.up_axis_idx), dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.forward_vec = torch.tensor([1., 0., 0.], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.torques = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
@@ -118,18 +140,14 @@ class SoloJumpTask(RLTask):
         self.feet_air_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
         self.last_dof_vel = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device, requires_grad=False)
 
-        self.num_dof = 20  # 20(flatfoot)    24(3dof_flatfoot)
-        self.all_torques = torch.zeros(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
-
         self.height_points = self.init_height_points()
         self.measured_heights = None
         # joint positions offsets
         self.default_dof_pos = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device, requires_grad=False)
         # reward episode sums
         torch_zeros = lambda : torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-        self.episode_sums = { "torques": torch_zeros(), "joint_acc": torch_zeros(), "action_rate": torch_zeros(), "roll": torch_zeros(), "trajectory": torch_zeros() }
+        self.episode_sums = { "distance": torch_zeros(), "velocity_final": torch_zeros(), "velocity_storage": torch_zeros(), "height": torch_zeros(), "velocity_x": torch_zeros(), "velocity_z": torch_zeros(), "time": torch_zeros(), "ground_force": torch_zeros(), "torques": torch_zeros(), "joint_acc": torch_zeros(), "action_rate": torch_zeros(), "roll": torch_zeros(), "trajectory": torch_zeros()}
         return
-
 
     def _get_noise_scale_vec(self, cfg):
         noise_vec = torch.zeros_like(self.obs_buf[0])
@@ -138,11 +156,11 @@ class SoloJumpTask(RLTask):
         noise_vec[:3] = self._task_cfg["env"]["learn"]["linearVelocityNoise"] * noise_level * self.lin_vel_scale
         noise_vec[3:6] = self._task_cfg["env"]["learn"]["angularVelocityNoise"] * noise_level * self.ang_vel_scale
         noise_vec[6:9] = self._task_cfg["env"]["learn"]["gravityNoise"] * noise_level
-        noise_vec[9:13] = 0. # commands
-        noise_vec[13:25] = self._task_cfg["env"]["learn"]["dofPositionNoise"] * noise_level * self.dof_pos_scale
-        noise_vec[25:37] = self._task_cfg["env"]["learn"]["dofVelocityNoise"] * noise_level * self.dof_vel_scale
-        noise_vec[37:177] = self._task_cfg["env"]["learn"]["heightMeasurementNoise"] * noise_level * self.height_meas_scale
-        noise_vec[177:189] = 0. # previous actions
+        noise_vec[9:11] = 0. # commands
+        noise_vec[11:23] = self._task_cfg["env"]["learn"]["dofPositionNoise"] * noise_level * self.dof_pos_scale
+        noise_vec[23:35] = self._task_cfg["env"]["learn"]["dofVelocityNoise"] * noise_level * self.dof_vel_scale
+        noise_vec[35:175] = self._task_cfg["env"]["learn"]["heightMeasurementNoise"] * noise_level * self.height_meas_scale
+        noise_vec[175:187] = 0. # previous actions
         return noise_vec
     
     def init_height_points(self):
@@ -168,41 +186,48 @@ class SoloJumpTask(RLTask):
     def set_up_scene(self, scene) -> None:
         self._stage = get_current_stage()
         self.get_terrain()
-        self.get_anymal()
+        self.get_solo()
         super().set_up_scene(scene)
-        self._anymals = AnymalView(prim_paths_expr="/World/envs/.*/anymal", name="anymal_view", track_contact_forces=True)
-        scene.add(self._anymals)
-        scene.add(self._anymals._knees)
-        scene.add(self._anymals._base)
+        self._solos = SoloView(prim_paths_expr="/World/envs/.*/solo", name="solo_view", track_contact_forces=True)
+        scene.add(self._solos)
+        scene.add(self._solos._knees)
+        scene.add(self._solos._base)
+        scene.add(self._solos._feet)
 
     def get_terrain(self):
         self.env_origins = torch.zeros((self.num_envs, 3), device=self.device, requires_grad=False)
         if not self.curriculum: self._task_cfg["env"]["terrain"]["maxInitMapLevel"] = self._task_cfg["env"]["terrain"]["numLevels"] - 1
 
         self.terrain_levels = torch.randint(0, self._task_cfg["env"]["terrain"]["maxInitMapLevel"]+1, (self.num_envs,), device=self.device)
+ 
+
         self.terrain_types = torch.randint(0, self._task_cfg["env"]["terrain"]["numTerrains"], (self.num_envs,), device=self.device)
 
-        self.commands[:, 2] = 1.5 + self.terrain_levels * 0.3
-        self.commands[:, 3] = self.terrain_types
+        self.commands[:, 0] = self.first_height + self.terrain_levels * 0.3
+        self.commands[:, 1] = self.terrain_types
 
         self._create_trimesh()
         self.terrain_origins = torch.from_numpy(self.terrain.env_origins).to(self.device).to(torch.float)
             
-    def get_anymal(self):
+    def get_solo(self):
         self.base_init_state = torch.tensor(self.base_init_state, dtype=torch.float, device=self.device, requires_grad=False)
-        # aggiunte mie
-        anymal_translation = torch.tensor([0.0, 0.0, 0.0])  # self.anymal_init_pos
-        anymal_orientation = torch.tensor([1.0, 0.0, 0.0, 0.0])  # self.anymal_init_orientation
-        anymal = Anymal(prim_path=self.default_zero_env_path + "/anymal", 
-                        name="anymal",
-                        translation=anymal_translation, 
-                        orientation=anymal_orientation,
-                        softfoot=True)
-        self._sim_config.apply_articulation_settings("anymal", get_prim_at_path(anymal.prim_path), self._sim_config.parse_actor_config("anymal"))
-        anymal.set_anymal_properties(self._stage, anymal.prim)
-        anymal.prepare_contacts(self._stage, anymal.prim)
 
-        self.dof_names = anymal.dof_names
+        solo_translation = self.base_init_state[:3]  # torch.tensor([0.0, 0.0, 0.0])  # self.solo_init_pos
+        solo_orientation = self.base_init_state[3:7]  # torch.tensor([1.0, 0.0, 0.0, 0.0])  # self.solo_init_orientation
+
+        self.random_position = torch.zeros(self._num_envs, device=self._device)
+        self.trajectory = torch.zeros(self._num_envs, 3, 20, device=self._device)
+        self.base_lin_target = torch.zeros(self.num_envs, 3, device=self._device)
+
+        solo = Solo(prim_path=self.default_zero_env_path + "/solo",
+                    name="solo",
+                    translation=solo_translation,
+                    orientation=solo_orientation)
+        self._sim_config.apply_articulation_settings("solo", get_prim_at_path(solo.prim_path), self._sim_config.parse_actor_config("solo"))
+        solo.set_solo_properties(self._stage, solo.prim)
+        solo.prepare_contacts(self._stage, solo.prim)
+
+        self.dof_names = solo.dof_names
         for i in range(self.num_actions):
             name = self.dof_names[i]
             angle = self.named_default_joint_angles[name]
@@ -211,13 +236,9 @@ class SoloJumpTask(RLTask):
     def post_reset(self):
         for i in range(self.num_envs):
             self.env_origins[i] = self.terrain_origins[self.terrain_levels[i], self.terrain_types[i]]
-        # self.num_dof = self._anymals.num_dof
-        self.dof_pos = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device)
-        self.dof_vel = torch.zeros((self.num_envs, 12), dtype=torch.float, device=self.device)
-
-        self.all_dof_pos = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device)
-        self.all_dof_vel = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device)
-
+        self.num_dof = self._solos.num_dof
+        self.dof_pos = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device)
+        self.dof_vel = torch.zeros((self.num_envs, self.num_dof), dtype=torch.float, device=self.device)
         self.base_pos = torch.zeros((self.num_envs, 3), dtype=torch.float, device=self.device)
         self.base_quat = torch.zeros((self.num_envs, 4), dtype=torch.float, device=self.device)
         self.base_velocities = torch.zeros((self.num_envs, 6), dtype=torch.float, device=self.device)
@@ -232,50 +253,60 @@ class SoloJumpTask(RLTask):
     def reset_idx(self, env_ids):
         indices = env_ids.to(dtype=torch.int32)
 
-        positions_offset = torch_rand_float(0.5, 1.5, (len(env_ids), 12), device=self.device)
-        velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), 12), device=self.device)
+        positions_offset = torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
+        velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
 
         self.dof_pos[env_ids] = self.default_dof_pos[env_ids] * positions_offset
         self.dof_vel[env_ids] = velocities
 
         self.update_terrain_level(env_ids)
         self.base_pos[env_ids] = self.base_init_state[0:3]
-        self.base_pos[env_ids, 0:3] += self.env_origins[env_ids]
-        self.base_pos[env_ids, 0:1] += torch_rand_float(-2, -1, (len(env_ids), 1), device=self.device)
+        self.base_pos[env_ids, 0:2] += self.env_origins[env_ids, 0:2]
+        self.base_pos[env_ids, 0] += -2   # later on da eliminare
 
-        
+
+        # later on
+        # self.random_position[env_ids] = torch_rand_float(-2.5, -2, (len(env_ids), 1), device=self.device).squeeze(1)  
+        # self.base_pos[env_ids, 0] += self.random_position[env_ids].squeeze().t()
+        # self.base_quat[env_ids] = self.base_init_state[3:7]
+        # angle = torch_rand_float(0, 2*3.14, (len(env_ids), 1), device=self.device) / 2
+        # self.base_quat[env_ids, 0:1] = torch.cos(angle)
+        # self.base_quat[env_ids, 3:4] = torch.sin(angle)
+
         self.base_quat[env_ids] = self.base_init_state[3:7]
-        angle = torch_rand_float(0, 2*3.14, (len(env_ids), 1), device=self.device) / 2
-        self.base_quat[env_ids, 0:1] = torch.cos(angle)
-        self.base_quat[env_ids, 3:4] = torch.sin(angle)
 
-        self.commands[env_ids, 0:1] = self.base_pos[env_ids, 0:1] - self.env_origins[env_ids, 0:1]
-        # self.commands[env_ids, 0:2] = 0
-        self.commands[env_ids, 1:2] = 2 * torch.atan2(self.base_quat[env_ids, 3:4], self.base_quat[env_ids, 0:1]) # malloc problem BOH
 
-        self.trajectory = self.create_trajectory(self.commands[:, 2])
+        # self.commands[env_ids, 0:1] = self.base_pos[env_ids, 0:1] - self.env_origins[env_ids, 0:1]
+        # self.commands[env_ids, 1:2] = 2 * torch.atan2(self.base_quat[env_ids, 3:4], self.base_quat[env_ids, 0:1]) 
+
+        self.create_trajectory(self.commands[:, 0], env_ids)
 
         self.base_velocities[env_ids] = self.base_init_state[7:]
 
-        self._anymals.set_world_poses(positions=self.base_pos[env_ids].clone(), 
-                                      orientations=self.base_quat[env_ids].clone(),
-                                      indices=indices)
-        self._anymals.set_velocities(velocities=self.base_velocities[env_ids].clone(),
-                                          indices=indices)
-        self.all_dof_pos[env_ids, :12] = self.dof_pos[env_ids]
-        self._anymals.set_joint_positions(positions=self.all_dof_pos[env_ids].clone(), 
-                                          indices=indices)
-        self.all_dof_vel[env_ids, :12] = self.dof_vel[env_ids]
-        self._anymals.set_joint_velocities(velocities=self.all_dof_vel[env_ids].clone(), 
-                                          indices=indices)
+        self._solos.set_world_poses(positions=self.base_pos[env_ids].clone(),
+                                    orientations=self.base_quat[env_ids].clone(),
+                                    indices=indices)
+        self._solos.set_velocities(velocities=self.base_velocities[env_ids].clone(),
+                                   indices=indices)
+        self._solos.set_joint_positions(positions=self.dof_pos[env_ids].clone(),
+                                        indices=indices)
+        self._solos.set_joint_velocities(velocities=self.dof_vel[env_ids].clone(),
+                                         indices=indices)
 
         # self.commands[env_ids] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.25).unsqueeze(1) # set small commands to zero
 
         self.last_actions[env_ids] = 0.
         self.last_dof_vel[env_ids] = 0.
         self.feet_air_time[env_ids] = 0.
-        self.progress_buf[env_ids] = 0
-        self.reset_buf[env_ids] = 1
+
+        self.progress_buf[env_ids] = 0.0
+        self.jump_time[env_ids] = 0.0
+        self.first_landing_time[env_ids] = 0.0
+        self.first_landing[env_ids] = 0
+        self.first_takeoff[env_ids] = 0
+        self.has_early_landed[env_ids] = 0
+
+        # self.reset_buf[env_ids] = 0
         self.last_base_pos [env_ids] = 0.
         self.last_base_quat [env_ids] = 0.
 
@@ -290,26 +321,22 @@ class SoloJumpTask(RLTask):
         if not self.init_done or not self.curriculum:
             # do not change on initial reset
             return
-        root_pos, _ = self._anymals.get_world_poses(clone=False)
-        distance = torch.norm(root_pos[env_ids, 0:3] - self.env_origins[env_ids, 0:3], dim=1)
+        # root_pos, _ = self._solos.get_world_poses(clone=False)
 
-        # self.terrain_levels[env_ids] -= 1 * (distance < torch.norm(self.commands[env_ids, :2])*self.max_episode_length_s*0.25)
-        # self.terrain_levels[env_ids] += 1 * (distance > self.terrain.env_length / 2)
-
-        self.terrain_levels[env_ids] -= 1 * (distance > 2)
-        self.terrain_levels[env_ids] += 1 * (distance < 0.4)
+        self.terrain_levels -= 1 * torch.logical_or(self.has_fallen == True , self.hasnt_flew == True)
+        self.terrain_levels += 1 * (self.mission_complete == True)
 
         self.terrain_levels[env_ids] = torch.clip(self.terrain_levels[env_ids], 0) % self.terrain.env_rows
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
     
     def refresh_dof_state_tensors(self):
-        self.dof_pos = self._anymals.get_joint_positions(clone=False)[:, :12]
-        self.dof_vel = self._anymals.get_joint_velocities(clone=False)[:, :12]
+        self.dof_pos = self._solos.get_joint_positions(clone=False)
+        self.dof_vel = self._solos.get_joint_velocities(clone=False)
     
     def refresh_body_state_tensors(self):
-        self.base_pos, self.base_quat = self._anymals.get_world_poses(clone=False)
-        self.base_velocities = self._anymals.get_velocities(clone=False)
-        self.knee_pos, self.knee_quat = self._anymals._knees.get_world_poses(clone=False)
+        self.base_pos, self.base_quat = self._solos.get_world_poses(clone=False)
+        self.base_velocities = self._solos.get_velocities(clone=False)
+        self.knee_pos, self.knee_quat = self._solos._knees.get_world_poses(clone=False)
 
     def pre_physics_step(self, actions):
         if not self._env._world.is_playing():
@@ -319,8 +346,7 @@ class SoloJumpTask(RLTask):
         for i in range(self.decimation):
             if self._env._world.is_playing():
                 torques = torch.clip(self.Kp*(self.action_scale*self.actions + self.default_dof_pos - self.dof_pos) - self.Kd*self.dof_vel, -80., 80.)
-                self.all_torques[:, :12] = torques
-                self._anymals.set_joint_efforts(self.all_torques)
+                self._solos.set_joint_efforts(torques)
                 self.torques = torques
                 SimulationContext.step(self._env._world, render=False)
                 self.refresh_dof_state_tensors()
@@ -347,53 +373,35 @@ class SoloJumpTask(RLTask):
 
             self.check_termination()
             self.get_states()
-            self.calculate_metrics()
+
+            self.single_metric()
 
             env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
-            if len(env_ids) > 0:
+            
+            if len(env_ids) > 0:               
                 self.reset_idx(env_ids)
 
             self.get_observations()
+
+            if self.obs_buf.isnan().any():
+                print(self.obs_buf.isnan().any(dim=0).nonzero(as_tuple=False).flatten()) 
+
+
             if self.add_noise:
                 self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
 
             self.last_actions[:] = self.actions[:]
             self.last_dof_vel[:] = self.dof_vel[:]
 
+            self.count += 1
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-
-    def push_robots(self):
-        self.base_velocities[:, 0:2] = torch_rand_float(-1., 1., (self.num_envs, 2), device=self.device) # lin vel x/y
-        self._anymals.set_velocities(self.base_velocities)
     
-    def check_termination(self):
-        #self.timeout_buf = torch.where(self.progress_buf >= self.max_episode_length - 1, torch.ones_like(self.timeout_buf), torch.zeros_like(self.timeout_buf))
-        knee_contact = torch.norm(self._anymals._knees.get_net_contact_forces(clone=False).view(self._num_envs, 4, 3), dim=-1) > 1.
-        self.has_fallen = (torch.norm(self._anymals._base.get_net_contact_forces(clone=False), dim=1) > 1.) | (torch.sum(knee_contact, dim=-1) > 1.)
-        self.reset_buf = self.has_fallen.clone().int()
-        #self.reset_buf = torch.where(self.timeout_buf.bool(), torch.ones_like(self.reset_buf), self.reset_buf)
 
-        self.hasnt_flew = (self.progress_buf >= self.max_ground_time).to(torch.int) & self._anymals.is_base_below_threshold(self.flying_threshold, 0.0).to(torch.int)
-        self.reset_buf += self.hasnt_flew.clone().int()
-  
-
-        self.mission_complete = ((self.base_pos[:, 2:3] - self.commands[:, 2:3] < 0.1).t() & (self.base_lin_vel < 0.1).all(dim=1)).flatten() # if vel low and heigth position reached
-        self.reset_buf += self.mission_complete.clone()
-        # self.reset_buf = torch.ones_like(self.reset_buf)
-
-    def calculate_metrics(self):
+    def single_metric (self):
 
         # joint acc penalty
         rew_joint_acc = torch.sum(torch.square(self.last_dof_vel - self.dof_vel), dim=1) * self.rew_scales["joint_acc"] 
-
-        # distance from trajectory penalty
-        self.computed_dist = self.dist_to_traj(self.base_pos[:, 0:3], self.trajectory)
-        base_pos_tensor = self.base_pos[:, 2:3].clone().detach()
-        base_pos_tensor_T = torch.transpose(base_pos_tensor, 0, 1)  
-        base_pos_tensor_T = base_pos_tensor_T.to(self.computed_dist.device)
-        rew_trajectory = (self.computed_dist * self.rew_scales["trajectory"] * base_pos_tensor_T).reshape(self.num_envs) 
-        rew_trajectory = rew_trajectory.to(self.device)
 
         # torque penalty  
         rew_torque = torch.sum(torch.square(self.torques), dim=1) * self.rew_scales["torque"]  
@@ -403,75 +411,363 @@ class SoloJumpTask(RLTask):
 
         # action rate penalty
         rew_action_rate = torch.sum(torch.square(self.last_actions - self.actions), dim=1) * self.rew_scales["action_rate"]
-       
-        # roll penalty           
-        rew_roll = torch.square(self.base_ang_vel[:, 1]) * self.rew_scales["roll"]  
 
-        # right final position reward
+        finish = self.env_origins[:, 0:2]
+        # finish[:, 2] += self.robot_default_height
+
+        rew_distance = torch.norm(self.base_pos[:, 0:2] - self.env_origins[:, 0:2], dim = -1) * self.rew_scales["roll"]
+
         rew_mission_complete = self.mission_complete * self.rew_scales["termination"]
-
-        # hasn't flew penalty
-        rew_hasnt_flew = self.hasnt_flew * self.rew_scales["hasnt_flew"]
-
+       
         # total reward
-        self.rew_buf = rew_joint_acc + rew_torque + rew_fallen_over + rew_action_rate + rew_roll + rew_hasnt_flew + rew_mission_complete + rew_trajectory
-        self.rew_buf = torch.clip(self.rew_buf, min=0., max=None)
+        self.rew_buf = rew_joint_acc + rew_torque + rew_fallen_over + rew_action_rate + rew_distance + rew_mission_complete
 
         # log episode reward sums
-
         self.episode_sums["torques"] += rew_torque
         self.episode_sums["joint_acc"] += rew_joint_acc
         self.episode_sums["action_rate"] += rew_action_rate
-        self.episode_sums["roll"] += rew_roll
-        self.episode_sums["trajectory"] += rew_trajectory
+        self.episode_sums["distance"] += rew_distance
+        
+
+    def general_metrics (self):
+          
+            self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
+            self.condition_start = (self.first_landing == 0) & (self.base_lin_vel[:, 2] < 0.1) 
+            self.condition_invert = (abs(self.base_lin_vel[:, 2]) < 0.15) & (self.base_pos[:, 2] < self.robot_default_height*0.75) & (self.first_takeoff == 0)
+            self.condition_first_landing = (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) > 0.1).any(dim=-1) & (self.first_landing == 0).t()
+            self.condition_ground = (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) > 0.1).any(dim=-1) & (self.first_landing == 1).t()
+            self.condition_first_takeoff = ((self.first_landing == 1) & (self.first_takeoff == 0) & (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) < 0.1).all(dim=-1).t())
+            self.condition_fly = (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) < 0.1).all(dim=-1) & (self.first_takeoff == 1).t()
+            self.condition_second_landing = (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) > 0.1).any(dim=-1) & (self.first_landing == 1).t() & (self.base_pos[:, 2] > self.commands[:, 0]+self.robot_default_height*0.75)
+            self.condition_early_landing = (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) > 0.1).any(dim=-1) & (self.first_landing == 1).t() & (self.base_pos[:, 2] < self.commands[:, 0]+self.robot_default_height*0.75)
+
+            self.how_many_0 = int(torch.sum(self.condition_start).item() / self._num_envs * 1024)
+            self.how_many_1 = int(torch.sum(self.condition_ground).item() / self._num_envs * 1024)
+            self.how_many_2 = int(torch.sum(self.condition_fly).item() / self._num_envs * 1024)
+            self.how_many_3 = int(torch.sum(self.condition_second_landing).item() / self._num_envs * 1024)
+            self.how_many_fall = int(torch.sum(self.has_fallen).item() / self._num_envs * 1024)
+            self.how_many_no_flew = int(torch.sum(self.hasnt_flew).item() / self._num_envs * 1024)
+            self.how_many_horphans = int(torch.sum(self.horphans).item() / self._num_envs * 1024)
+
+            # row = [self.how_many_0, self.how_many_1, self.how_many_2, self.how_many_3, self.how_many_fall, self.how_many_no_flew]
+            # writer.writerrow(row)
+
+            if self.count%12 == 0:
+                print("HOW MANY", self.how_many_0, self.how_many_1, self.how_many_2, self.how_many_3, self.how_many_fall, self.how_many_no_flew, "out of 1024")
+                # print(torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1))
+
+            self.zero_rewards()
+
+            self.first_landing_fun()
+
+            if any(self.condition_ground):
+                
+               self.calculate_metrics_first()
+
+            self.first_takeoff_fun()
+
+            if any(self.condition_fly):
+                self.calculate_metrics_second()
+
+            if any(self.condition_second_landing):
+                self.calculate_metrics_third()
+
+            self.early_landing()
+
+            self.rew_buf = torch.clip(self.rew_buf , min=-2, max=None)
+
+            self.conditions = self.condition_start | self.condition_ground | self.condition_fly | self.condition_second_landing
+            self.not_evaluated = ~self.conditions
+            
+            # print(torch.sum(not_evaluated).item())
+
+            # print((torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) > 0.1).any(dim=-1)[not_evaluated]) # quasi tutti toccano
+            # print(self.base_lin_vel[not_evaluated, 2])  # quasi tutti > 0
+            # print(self.first_landing[not_evaluated])  # quasi tutti 0
+            # print(self.base_pos[not_evaluated, 2]) # poco sotto default
+    
+
+    def push_robots(self):
+        self.base_velocities[:, 0:2] = torch_rand_float(-1., 1., (self.num_envs, 2), device=self.device) # lin vel x/y
+        self._solos.set_velocities(self.base_velocities)
+    
+    def check_termination(self):
+ 
+        knee_contact = torch.norm(self._solos._knees.get_net_contact_forces(clone=False).view(self._num_envs, 4, 3), dim=-1) > 1.       
+        # self.has_fallen = (torch.norm(self._solos._base.get_net_contact_forces(clone=False), dim=-1) > 0.1) | (torch.sum(knee_contact, dim=-1) > 0.1)
+        self.has_fallen = torch.zeros_like(self.reset_buf)
+
+        # self.hasnt_flew = (self.progress_buf >= self.max_ground_time) & ((self.first_takeoff == 0) | ~self._solos.is_base_below_threshold(0.8, 0))  # no for single_metric
+
+        # self.mission_complete = ((torch.abs(self.base_pos[:, 2:3] - (self.commands[:, 0] + self.robot_default_height)) < 0.15).t() & (abs(self.base_lin_vel) < 0.2).all(dim=1)).flatten() & (torch.norm(self._solos.get_contact_forces()[0].reshape(self._num_envs, 4, 3), dim=-1) > 0.1).all(dim=-1)# if vel low and heigth position reached
+        self.mission_complete = torch.zeros_like(self.reset_buf)
+
+        # self.reset_buf = (self.has_fallen | self.hasnt_flew | self.mission_complete).long()
+        self.reset_buf = (self.has_fallen | self.mission_complete).long()
+
+        if self.mission_complete.any():
+            print("MISSION COMPLETED")
+            print("POSITION", self.base_pos[self.mission_complete, :].numpy())
+            print("VELOCITY", self.base_lin_vel[self.mission_complete, :].numpy())
+            print("LIFETIME", (self.progress_buf[self.mission_complete] * self.dt ).numpy())
+
+        self.horphans = self.not_evaluated 
+        # self.reset_buf += self.horphans.clone().int()
+
+    def zero_rewards(self):
+        index = self.condition_start
+
+        # keep going down until a point defined as a jump_energy_storage    
+        rew_height = self.base_pos [index, 2] * self.rew_scales["storage_height"]
+
+        # joint acc penalty
+        rew_joint_acc = torch.sum(torch.square(self.last_dof_vel[index, :] - self.dof_vel[index, :]), dim=1) * self.rew_scales["joint_acc"] 
+
+        # torque penalty  
+        rew_torque = torch.sum(torch.square(self.torques[index, :]), dim=1) * self.rew_scales["torque"]  
+
+        # fallen over penalty
+        rew_fallen_over = self.has_fallen[index] * self.rew_scales["fallen_over"]
+
+        # roll penalty           
+        rew_roll = torch.square(self.base_ang_vel[index, 1]) * self.rew_scales["roll"]  
+        rew_action_rate = torch.sum(torch.square(self.last_actions[index, :] - self.actions[index, :]), dim=1) * self.rew_scales["action_rate"]
+
+        # total reward
+        self.rew_buf[index] += rew_joint_acc + rew_torque + rew_fallen_over + rew_height
+  
+        # log episode reward sums
+        self.episode_sums["torques"][index] += rew_torque
+        self.episode_sums["joint_acc"][index] += rew_joint_acc
+        self.episode_sums["height"][index] += rew_height
+        self.episode_sums["action_rate"][index] += rew_action_rate
+        self.episode_sums["roll"][index] += rew_roll
+
+        # print("ZERO")
+
+
+    def first_landing_fun(self):    
+        index = self.condition_invert # self.condition_first_landing   
+        self.first_landing[index] = 1
+        self.first_landing_time[index] = self.progress_buf[index]
+
+
+    def calculate_metrics_first(self):
+        
+        index = self.condition_ground
+
+        # joint acc penalty
+        rew_joint_acc = torch.sum(torch.square(self.last_dof_vel[index, :] - self.dof_vel[index, :]), dim=1) * self.rew_scales["joint_acc"] 
+
+        # torque penalty  
+        rew_torque = torch.sum(torch.square(self.torques[index, :]), dim=1) * self.rew_scales["torque"]  
+
+        # fallen over penalty
+        rew_fallen_over = self.has_fallen[index] * self.rew_scales["fallen_over"]
+
+        # action rate penalty
+        rew_action_rate = torch.sum(torch.square(self.last_actions[index, :] - self.actions[index, :]), dim=1) * self.rew_scales["action_rate"]
+       
+        # roll penalty           
+        rew_roll = torch.square(self.base_ang_vel[index, 1]) * self.rew_scales["roll"]  
+
+        # hasn't flew penalty
+        rew_hasnt_flew = self.hasnt_flew[index] * self.rew_scales["hasnt_flew"]
+
+        # velocity error in order to perfor the jump
+        rew_velocity_x = 1 / (1 + torch.square(self.base_lin_vel[index, 0] - self.base_lin_target[index, 0])) * self.rew_scales["velocity_x"]
+        rew_velocity_z = 1 / (1 + torch.square(self.base_lin_vel[index, 2] - self.base_lin_target[index, 2])) * self.rew_scales["velocity_z"] 
+
+        # total reward
+        self.rew_buf[index] += rew_joint_acc + rew_torque + rew_fallen_over + rew_action_rate + rew_roll + rew_hasnt_flew + rew_velocity_x + rew_velocity_z
+
+  
+        # log episode reward sums
+        self.episode_sums["torques"][index] += rew_torque
+        self.episode_sums["joint_acc"][index] += rew_joint_acc
+        self.episode_sums["action_rate"][index] += rew_action_rate
+        self.episode_sums["roll"][index] += rew_roll
+        self.episode_sums["velocity_z"][index] += rew_velocity_z
+        self.episode_sums["velocity_x"][index] += rew_velocity_x
+        
+        # print("UNO")
+
+    def first_takeoff_fun(self):
+        index = self.condition_first_takeoff
+        self.first_takeoff[index] = 1
+        self.jump_time[index] = self.progress_buf[index]
+        self.has_early_landed[index] = 0
+
+    def early_landing(self):
+        index = self.condition_early_landing
+        self.has_early_landed[index] = 1
+        self.first_takeoff[index] = 0
 
  
-    def dist_to_traj(self, point, traj):
-        traj_tensor = torch.from_numpy(traj).to(point.device)  # Convert traj to torch tensor and move to the same device as point
-        dists = torch.norm(traj_tensor - point.unsqueeze(2), dim=1)  # Compute L2 distance between each point in traj and point, resulting in a tensor of shape (num_envs, num_points)
-        return torch.min(dists, dim=1)[0]  # Compute the minimum distance along the second dimension, resulting in a tensor of shape (num_envs,)
+    def calculate_metrics_second(self):
 
-    def create_trajectory(self, commands):
-        finish = torch.zeros(self.num_envs, 3)
+        index = self.condition_fly
+       
+        rew_joint_acc = torch.sum(torch.square(self.last_dof_vel[index, :] - self.dof_vel[index, :]), dim=1) * self.rew_scales["joint_acc"] 
+        #following defined trajectory
+        time = torch.zeros(self._num_envs, dtype=torch.long, device=self._device)
+        time[index] = self.progress_buf[index] - self.jump_time[index]
+
+        # start_time_condition = (self.progress_buf - self.jump_time == 0)
+
+        # if self.count%192 == 0 & start_time_condition.any():
+        #     print("target_velZ", (self.base_lin_target[start_time_condition, 2]).mean())
+        #     print("target_velX", (self.base_lin_target[start_time_condition, 0]).mean())
+        #     print("diff_vel_z", (self.base_lin_vel[start_time_condition, 2] - self.base_lin_target[start_time_condition, 2]).mean())  
+        #     print("diff_vel_x", (self.base_lin_vel[start_time_condition, 0] - self.base_lin_target[start_time_condition, 0]).mean())             
+
+        true_time = time * self.dt
+
+        # print("time", true_time)
+        
+        time_condition = (true_time > 0.1) & (self.has_early_landed == 0)
+
+        if time_condition.any():
+
+            self.computed_dist = torch.zeros(self._num_envs, device=self._device)
+            self.computed_dist = self.dist_to_traj(self.base_pos[:, 0:3], self.trajectory, time)
+            rew_trajectory = torch.zeros(len(index), device=self._device)
+            rew_trajectory += -0.03
+            rew_trajectory_all = (self.computed_dist * self.rew_scales["trajectory"]).reshape(self.num_envs) 
+
+            rew_trajectory[time_condition] += rew_trajectory_all[time_condition].to(self.device)
+
+        else:
+            rew_trajectory = torch.zeros(len(index), device=self._device)
+            rew_trajectory += -0.03
+            
+
+        rew_torque = torch.sum(torch.square(self.torques[index, :]), dim=1) * self.rew_scales["torque"] 
+        rew_roll = torch.square(self.base_ang_vel[index, 1]) * self.rew_scales["roll"] 
+        rew_time = torch.log10(1 + time[index]) * self.rew_scales["time"] 
+        rew_fallen_over = self.has_fallen[index] * self.rew_scales["fallen_over_final"]
+
+        # if self.count%192 == 0 :
+        #     print("dist_to_traj", self.computed_dist[index].mean().numpy())
+        #     print("true_time", (sum(true_time[index])/len(true_time[index])).numpy())  
+
+        # total reward
+        self.rew_buf[index]  += rew_joint_acc + rew_torque + rew_roll + rew_time + rew_trajectory[index] + rew_fallen_over
+
+        # log episode reward sums
+
+        self.episode_sums["torques"][index] += rew_torque
+        self.episode_sums["joint_acc"][index] += rew_joint_acc
+        self.episode_sums["roll"][index] += rew_roll
+        self.episode_sums["trajectory"][index] += rew_trajectory[index]
+        self.episode_sums["time"][index] += rew_time
+
+        # print("DUE")
+
+    def calculate_metrics_third(self):
+    
+        index = self.condition_second_landing
+
+        rew_reached_last_phase = self.condition_second_landing[index] * 2.5
+
+        # mission done
+        rew_mission_complete = self.mission_complete[index] * self.rew_scales["termination"]
+
+        # set velocity to zero
+        rew_velocity = torch.sum(torch.square(self.base_lin_vel[index, :]), dim=1) * self.rew_scales["velocity_final"]
+
+        rew_fallen_over = self.has_fallen[index] * self.rew_scales["fallen_over_final"]
+
+        rew_joint_acc = torch.sum(torch.square(self.last_dof_vel[index, :]  - self.dof_vel[index, :] ), dim=1) * self.rew_scales["joint_acc"]         
+            
+        rew_torque = torch.sum(torch.square(self.torques[index, :] ), dim=1) * self.rew_scales["torque"] 
+
+        # ground forces over feet
+        rew_ground_force = torch.sum(torch.norm(torch.reshape( self._solos.get_contact_forces()[0], (1024, 4, 3))[index] , dim=2), dim=1) * self.rew_scales["ground_forces"] 
+
+        # total reward
+        self.rew_buf[index] += rew_joint_acc + rew_torque + rew_mission_complete + rew_ground_force + rew_velocity + rew_fallen_over + rew_reached_last_phase
+        # log episode reward sums
+
+        self.episode_sums["torques"][index] += rew_torque
+        self.episode_sums["joint_acc"][index] += rew_joint_acc
+        self.episode_sums["velocity_final"][index] += rew_velocity
+        self.episode_sums["ground_force"][index] += rew_ground_force
+
+
+    def dist_to_traj(self, point, traj, time_buf):
+
+        traj_tensor = traj.to(point.device) 
+        instant = (time_buf * self.dt / self.delta_t_traj_s).long()
+        dists = torch.zeros(self._num_envs)
+        instant = torch.clamp(instant, 0, traj_tensor.size()[2] - 1)
+        selected_traj = torch.zeros(self._num_envs, 3, device = self._device)
+        
+        for i in range(len(instant)):
+            selected_traj = traj_tensor[:, :, instant[i]]
+
+        dists = torch.norm(selected_traj - point, dim=1) 
+        return dists 
+
+    def create_trajectory(self, commands, env_ids):
+
+        finish = torch.zeros(self._num_envs, 3, device = self._device)
         start = (self.base_pos[:, 0:3]).to(finish.device)
-        start[:, 2] += 0.5
-        finish[:, 2] = commands
+        start[:, 2] = self.robot_default_height 
+
+        # make start a bit further
+        # start[:, 0] += 0.3  
+        # start[:, 2] += 0.1
+
+        finish[:, 2] = commands + self.robot_default_height
+        finish[:, 1] = start[:, 1]
+        finish[:, 0] = start[:, 0] - self.random_position.t()
+ 
         # Calculate the distance between start and finish points
         distance_norm = torch.norm(finish - start)
-        distance = finish - start
-        # Calculate the direction of the trajectory
-        direction = distance / torch.sqrt(distance_norm)
+
         # set maximum height
-        maximum_height = commands * (1 + commands/distance_norm) # calculate it given distance, need to think
+        maximum_height = (commands + self.robot_default_height) * (1 + commands/distance_norm) # calculate it given distance, need to think
 
-        num_points = 20
-        t = np.linspace(0, 1, num_points)
-        x = start[:, 0].reshape(-1, 1) + direction[:, 0].reshape(-1, 1) * distance[:, 0].reshape(-1, 1) @ t.reshape(1, -1)
-        y = start[:, 1].reshape(-1, 1) + direction[:, 1].reshape(-1, 1) * distance[:, 1].reshape(-1, 1) @ t.reshape(1, -1)
-        plane = np.vstack((x, y)).transpose().reshape(self.num_envs, num_points, 2)
+        num_points = 10
+        t = torch.linspace(0, 1, num_points).to(self._device)
+
+        vel_zeta = (torch.sqrt(torch.abs((maximum_height - start[:, 2]) * (2*self.gravity)))).to(self._device)
+
+        final_time = (- vel_zeta - torch.sqrt(torch.abs(torch.pow(vel_zeta, 2) + 2 * self.gravity + (finish[:, 2] - start[:, 2])))) / self.gravity
+
+        time = final_time.unsqueeze(1) * t.unsqueeze(0)
+
+        self.delta_t_traj_s = final_time / num_points
+
+        start_value = start[0, 2]
+        vel_zeta_value = vel_zeta[0]
+        time_values = time[0]
+
+        zeta_axis_intermediate = start_value + vel_zeta_value * time_values
+        gravity_term = 0.5 * self.gravity * torch.pow(time_values, 2)
+        zeta_axis = (zeta_axis_intermediate + gravity_term)
+
+        vel_x = ((finish[:, 0] - start[:, 0]) / final_time).to(self._device)
+
+        vel_y = ((finish[:, 1] - start[:, 1]) / final_time).to(self._device)
+
+        x_axis = (start[:, 0] + vel_x.unsqueeze(0) * time_values.unsqueeze(1))
+
+        y_axis = torch.tile(start[:, 1].unsqueeze(1), (1, num_points))
+
+        self.base_lin_target = torch.stack([vel_x.clone().detach(), vel_y.clone().detach(), vel_zeta.clone().detach()], dim=1)
   
-        a = (finish[:, 2] - start[:, 2]) / np.linalg.norm(finish[:, 0:2] - start[:, 0:2])  
-        b = (start[:, 2] - a * np.linalg.norm(start[:, 0:2]) + a * np.linalg.norm(finish[:, 0:2] - start[:, 0:2])).to(a.device) 
-        c = (maximum_height.to(a.device) - b)
-   
-        plane = torch.from_numpy(plane).to(a.device)
- 
-        z = a[:, None] * torch.norm(plane, dim=2) + b[:, None] + c[:, None]
-
-        trajectory = np.stack((x, y, z), axis=1)  # num_env x 3D x t
-
-        return trajectory
-
-
+        self.trajectory = torch.stack ([x_axis.t(), y_axis, zeta_axis.unsqueeze(0).expand(self._num_envs, -1)], dim = 1)
 
 
     def get_observations(self):
         self.measured_heights = self.get_heights()
-        heights = torch.clip(self.base_pos[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.height_meas_scale
+        heights = torch.clip(self.base_pos[:, 2].unsqueeze(1) - self.robot_default_height - self.measured_heights, -1, 1.) * self.height_meas_scale
         self.obs_buf = torch.cat((  self.base_lin_vel * self.lin_vel_scale,
                                     self.base_ang_vel  * self.ang_vel_scale,
                                     self.projected_gravity,
-                                    self.commands[:, 0:4], # * self.commands_scale,
+                                    self.commands[:, 0:2], # * self.commands_scale,
                                     self.dof_pos * self.dof_pos_scale,
                                     self.dof_vel * self.dof_vel_scale,
                                     heights,
@@ -525,7 +821,6 @@ class SoloJumpTask(RLTask):
         heights = torch.min(heights1, heights2)
 
         return heights.view(self.num_envs, -1) * self.terrain.vertical_scale
-
 
 
 @torch.jit.script

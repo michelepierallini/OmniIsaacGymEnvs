@@ -44,6 +44,15 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.tasks.shadow_hand import ShadowHandTask
     from omniisaacgymenvs.tasks.crazyflie import CrazyflieTask
     from omniisaacgymenvs.tasks.solo_jump import SoloJumpTask
+    from omniisaacgymenvs.tasks.softleg_jump import SoftlegJumpTask
+    from omniisaacgymenvs.tasks.softleg_jump_tre import SoftlegJumpTaskTre
+    # from omniisaacgymenvs.tasks.fishing_rod import FishingRodTask
+    from omniisaacgymenvs.tasks.fishing_rod_real import FishingRodTask
+    from omniisaacgymenvs.tasks.fishing_rod_real_pos import FishingRodTaskPos
+    from omniisaacgymenvs.tasks.softleg_jump_quattro import SoftlegJumpTaskQuattro
+    from omniisaacgymenvs.tasks.softleg_jump_cinque import SoftlegJumpTaskCinque
+
+
     
     # Mappings from strings to environments
     task_map = {
@@ -64,8 +73,14 @@ def initialize_task(config, env, init_sim=True):
         "ShadowHand": ShadowHandTask,
         "ShadowHandOpenAI_FF": ShadowHandTask,
         "ShadowHandOpenAI_LSTM": ShadowHandTask,
-        "SoloJump": SoloJumpTask
-    }
+        "SoloJump": SoloJumpTask,
+        "SoftlegJump": SoftlegJumpTask, 
+        "SoftlegJumpTre" : SoftlegJumpTaskTre,
+        "SoftlegJumpQuattro" : SoftlegJumpTaskQuattro,
+        "SoftlegJumpCinque" : SoftlegJumpTaskCinque,
+        "FishingRod" : FishingRodTask, 
+        "FishingRodPos": FishingRodTaskPos
+        }
 
     from .config_utils.sim_config import SimConfig
     sim_config = SimConfig(config)

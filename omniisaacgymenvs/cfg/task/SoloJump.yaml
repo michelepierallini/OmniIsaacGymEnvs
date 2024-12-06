@@ -17,8 +17,9 @@ env:
     maxInitMapLevel: 0
     mapLength: 5.  # meters
     mapWidth: 5.  # meters
-    numLevels: 4
+    numLevels: 6
     numTerrains: 2
+    first_height: 0.
     # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
     # terrainProportions: [0.1, 0.1, 0.35, 0.25, 0.2]
     # tri mesh only:
@@ -46,35 +47,41 @@ env:
     decimation: 4
 
   defaultJointAngles:  # = target angles when action = 0.0
-    LF_HAA: 0.03    # [rad]
-    LH_HAA: 0.03    # [rad]
-    RF_HAA: -0.03   # [rad]
-    RH_HAA: -0.03   # [rad]
+    FL_HAA: 0.03    # [rad]
+    FR_HAA: -0.03   # [rad]
+    HL_HAA: 0.03    # [rad]
+    HR_HAA: -0.03   # [rad]
 
-    LF_HFE: 0.4     # [rad]
-    LH_HFE: -0.4    # [rad]
-    RF_HFE: 0.4     # [rad]
-    RH_HFE: -0.4    # [rad]
+    FL_HFE: 0.4     # [rad]
+    FR_HFE: 0.4     # [rad]
+    HL_HFE: -0.4    # [rad]    
+    HR_HFE: -0.4    # [rad]
 
-    LF_KFE: -0.8    # [rad]
-    LH_KFE: 0.8     # [rad]
-    RF_KFE: -0.8    # [rad]
-    RH_KFE: 0.8     # [rad]
+    FL_KFE: -0.8    # [rad]
+    FR_KFE: -0.8    # [rad]
+    HL_KFE: 0.8     # [rad]
+    HR_KFE: 0.8     # [rad]
 
 
   learn:
     # rewards
-
-    torqueRewardScale: 0.00002 
-    jointAccRewardScale: 0.0005
-    actionRateRewardScale: 0.01
-    fallenOverRewardScale: -1.0
-    rollRewardScale: 0.01
-    FinalPosRewardScale: -3
-    TerminationRewardScale: 1
-    hasntFlewRewardScale: -0.5
-    trajectoryRewardScale: -0.1
-
+    # new values not runned yet (FOF, HF, VX, Tr, Ti)
+    torqueRewardScale: -0.000002   #
+    jointAccRewardScale: -0.00005  
+    actionRateRewardScale: -0.002    
+    fallenOverRewardScale: -0.6   
+    fallenOverFinalRewardScale: -0.1  
+    rollRewardScale: -0.1    
+    TerminationRewardScale: 10  
+    hasntFlewRewardScale: -0.3  
+    trajectoryRewardScale: -0.6    
+    velocityXRewardScale: 3      # 10
+    velocityZRewardScale: 2     # 7
+    velocityfinalReward: -1
+    timeRewardScale: 5     #5
+    storageheightRewardScale: -0.5
+    storagevelocityRewardScale: 0.01
+    ground_forcesRewardScale: -1  
 
     # normalization
     linearVelocityScale: 2.0
@@ -146,7 +153,7 @@ sim:
     gpu_max_num_partitions: 8
 
 
-  anymal:
+  solo:
     # -1 to use default values
     override_usd_defaults: False
     enable_self_collisions: True

@@ -39,6 +39,7 @@ class Terrain:
         self.horizontal_scale = 0.3 #  0.1
         self.vertical_scale = 0.1  # 0.005
         self.border_size = 3.0  # 20
+        self.first_height = cfg["first_height"]
         self.env_length = cfg["mapLength"]
         self.env_width = cfg["mapWidth"]
         # self.proportions = [np.sum(cfg["terrainProportions"][:i+1]) for i in range(len(cfg["terrainProportions"]))]
@@ -78,8 +79,8 @@ class Terrain:
                     self.box_obstacle(i, terrain)
                 
                 if j == 1:
+                   
                     self.box_obstacle(i, terrain)
-                    # self.circle_box_obstacle(i, terrain)
                     
                 # Heightfield coordinate system
                 start_x = self.border + i * self.length_per_env_pixels
@@ -103,7 +104,7 @@ class Terrain:
     def box_obstacle(self, diff_level, terrain):
         cube_width = 1.5  # meters
         cube_length = 1.5  # meters
-        cube_height = 0.5 + diff_level * 0.3  # meters
+        cube_height = self.first_height + diff_level * 0.1  # meters
         c_width, c_length = self.width_per_env_pixels // 2,  self.length_per_env_pixels // 2
         cube_width_pixels = int(cube_width / self.horizontal_scale)
         cube_length_pixels = int(cube_length / self.horizontal_scale)
@@ -132,8 +133,8 @@ class Terrain:
         dist = np.sqrt(x**2 + y**2)
         
         # use a radial function to map the distance to a height value
-        circle_center_height = 0.5 + diff_level * 0.3
-        circle_edge_height = 0 + diff_level * 0.3
+        circle_center_height = self.first_height + diff_level * 0.1
+        circle_edge_height = 0 + diff_level * 0.1
         circle_radius_pixels = int(circle_cube_width_pixels / 2)
 
         

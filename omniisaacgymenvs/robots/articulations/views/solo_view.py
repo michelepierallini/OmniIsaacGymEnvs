@@ -32,13 +32,13 @@ from omni.isaac.core.articulations import ArticulationView
 from omni.isaac.core.prims import RigidPrimView
 
 
-class AnymalView(ArticulationView):
+class SoloView(ArticulationView):
     def __init__(
         self,
         prim_paths_expr: str,
-        name: Optional[str] = "AnymalView",
-        track_contact_forces=False,
-        prepare_contact_sensors=False
+        name: Optional[str] = "SololView",
+        track_contact_forces=True,
+        prepare_contact_sensors=True
     ) -> None:
         """[summary]
         """
@@ -48,12 +48,20 @@ class AnymalView(ArticulationView):
             name=name,
             reset_xform_properties=False
         )
-        self._knees = RigidPrimView(prim_paths_expr="/World/envs/.*/anymal/.*_THIGH",
-            name="knees_view", reset_xform_properties=False, track_contact_forces=track_contact_forces, prepare_contact_sensors=prepare_contact_sensors)
-        # self._soles = RigidPrimView(prim_paths_expr="/World/envs/.*/anymal/.*_sole_link",
-        #     name="soles_view", reset_xform_properties=False, track_contact_forces=track_contact_forces, prepare_contact_sensors=prepare_contact_sensors)
-        self._base = RigidPrimView(prim_paths_expr="/World/envs/.*/anymal/base",
-            name="base_view", reset_xform_properties=False, track_contact_forces=track_contact_forces, prepare_contact_sensors=prepare_contact_sensors)
+        self._knees = RigidPrimView(prim_paths_expr="/World/envs/.*/solo/.*_LOWER_LEG",
+            name="knees_view", reset_xform_properties=False, 
+            track_contact_forces=track_contact_forces, 
+            prepare_contact_sensors=prepare_contact_sensors)
+        
+        self._base = RigidPrimView(prim_paths_expr="/World/envs/.*/solo/base_link",
+            name="base_view", reset_xform_properties=False, 
+            track_contact_forces=track_contact_forces, 
+            prepare_contact_sensors=prepare_contact_sensors)
+        
+        self._feet = RigidPrimView(prim_paths_expr="/World/envs/.*/solo/.*_LOWER_LEG",
+            name="feet_view", reset_xform_properties=False, 
+            track_contact_forces=track_contact_forces, 
+            prepare_contact_sensors=prepare_contact_sensors)
 
     def get_knee_transforms(self):
         return self._knees.get_world_poses()
@@ -70,3 +78,10 @@ class AnymalView(ArticulationView):
         base_heights = base_pos[:, 2]
         base_heights -= ground_heights
         return (base_heights[:] < threshold)
+    
+    def get_contact_forces(self):
+        knee_forces = self._knees.get_net_contact_forces()
+        base_forces = self._base.get_net_contact_forces()
+        feet_forces = self._feet.get_net_contact_forces()
+        return feet_forces, knee_forces, base_forces    # (num_envs, 4 point of contact, 3 dimensions force) for knees, (num, 3) for base
+    

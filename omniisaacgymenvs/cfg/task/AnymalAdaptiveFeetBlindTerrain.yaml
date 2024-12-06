@@ -72,7 +72,7 @@ env:
     orientationRewardScale: -0.
     torqueRewardScale: -0.00002
     jointAccRewardScale: -0.0005
-    baseHeightRewardScale: -0.01
+    baseHeightRewardScale: -0.5
     actionRateRewardScale: -0.01
     fallenOverRewardScale: -1.0
     # cosmetics
@@ -139,7 +139,7 @@ sim:
     gpu_max_rigid_contact_count: 524288
     gpu_max_rigid_patch_count: 163840
     gpu_found_lost_pairs_capacity: 4194304
-    gpu_found_lost_aggregate_pairs_capacity: 142626816  # 33554432(perceptive_12dof) 142610432(flatfoot) 142626816(3dof_flatfoot)
+    gpu_found_lost_aggregate_pairs_capacity: 33554432  # 41955328  # 128436224  # 33554432(perceptive_12dof) 142610432(flatfoot) 142626816(3dof_flatfoot)
     gpu_total_aggregate_pairs_capacity: 4194304
     gpu_max_soft_body_contacts: 1048576
     gpu_max_particle_contacts: 1048576
@@ -151,7 +151,7 @@ sim:
   anymal:
     # -1 to use default values
     override_usd_defaults: False
-    enable_self_collisions: True
+    enable_self_collisions: True  # False
     enable_gyroscopic_forces: False
     # also in stage params
     # per-actor

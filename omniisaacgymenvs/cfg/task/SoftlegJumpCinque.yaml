@@ -1,0 +1,148 @@
+# used to create the object
+name: SoftlegJumpCinque
+
+physics_engine: ${..physics_engine}
+
+# if given, will override the device setting in gym. 
+env:
+  numEnvs: ${resolve_default:128,${...num_envs}}
+  envSpacing: 3.0 # [q0 q1 q2, q0_vel q1_vel q2_vel], what about contact, time, and previous_control_action ?
+  resetDist: 3.0 
+  maxEffort: 20.0
+  numActions: 2
+  # numObservations: 9
+  numObservations: 7
+  clipObservations: 100.0 ## range to clip obs (considering velocitis it can be high)
+  clipActions: 15.0 ## range of the actuators [Nm]
+  controlFrequencyInv: 4 # 2 # 4 # 100 Hz (?) 60 Hz ## control decimation, ie. how many simulator steps between RL actions
+  episodeLength: 2.0 # 0.5 # 1.0 [sec]
+  heightDes: 1.0 # [m]
+  lengthSoftLeg : 0.45 # [m]
+  whenToPrint : 5
+
+  terrain:
+    staticFriction: 1.0  # [-]
+    dynamicFriction: 1.0  # [-]
+    restitution: 0.
+
+  defaultJointAngles: 
+    softleg_1_cart_joint: 0.11 # 0.11                  # [m]
+    softleg_1_hip_joint: -0.75 # 2.494075501099897     # [rad]
+    softleg_1_knee_joint: -0.75 # -3.244567079457459   # [rad]
+
+  initState:
+    q: [0.11, -0.75, -0.75] # [0.11, 2.494075501099897, -3.244567079457459] [m, rad, rad]
+    qDot: [0.0, 0.0, 0.0] # q0_dot, q1_dot, q2_dot [m, rad, rad]/s
+  
+  control:
+    # stiffness: [50., 50.]  # [N*m/rad]
+    # damping: [2., 0.3]  # [N*m*s/rad]
+
+    ## nuovi pd from SoftlegJump028_target5 and SoftlegJump027_foot_friction_17_maxVel3300_newPD.all()
+    # stiffness: [1.23, 1.23]              # [N*m/deg]
+    # damping: [0.006981317, 0.006981317]  # [N*m*s/deg]
+
+    ## from SoftlegJump030_target9
+    stiffness: [0.8674531575294934, 0.86745315752949343]              # [N*m/deg]
+    damping: [0.08674531575294935, 0.08674531575294935]               # [N*m*s/deg]
+    decimation: 1 # Number of control action updates @ sim DT per policy DT
+    actionScale: 3.141592653589793 
+  
+  learn:
+    qScale: 3.141592653589793
+    qDotScale: 80.0 # qScale * 10 ## controlla non ha molto senso
+    # action scale: target angle = actionScale * action + defaultAngle
+    actionScale: 3.141592653589793
+    addNoise: True
+    noiseLevel: 0.1
+    qNoise: 0.01
+    qDotNoise: 0.01
+
+    # weight for the reward 
+    wControlVarSat: 1 # 0.3
+    wControlVar: 1 # 0.05
+    wErrDistance: 1 # 0.5
+    wConfigStartEnd: 1 # 0.1
+    wVelFinal: 1 # 0.05
+    wHeightGneral: 1
+    wFootDownPrismatic: 1 
+    wHipMinusAllTime: 1
+    wGroundForce: 1
+    wActionRate: 1
+    wJointAcc: 1
+
+    torqueRewardScale: 1        # -0.000002 
+    jointAccRewardScale: 1      # -0.00005  
+    actionRateRewardScale: 1    # -0.002    
+    terminationRewardScale: 1   # 10  
+    velocityRewardScale: 1      # 2    
+    timeRewardScale: 1          # 5     
+    storageheightRewardScale: 1 # -0.5
+    ground_forcesRewardScale: 1 # -1  
+    distanceScale: 1
+    finalConfig: 1
+    footDownPrismatic: 1
+    hipMinusAllTheTime: 1
+
+sim:
+  dt: 0.005 # 0.001
+  preTime: 8.0 # 1.0
+  use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
+  gravity: [0.0, 0.0, -9.81]
+  add_ground_plane: True
+  add_distant_light: True
+  use_flatcache: True
+  enable_scene_query_support: False
+  disable_contact_processing: True
+  # set to True if you use camera sensors in the environment
+  enable_cameras: False
+
+  default_physics_material:
+    static_friction: 1.0
+    dynamic_friction: 1.0
+    restitution: 0.0
+
+  physx:
+    worker_thread_count: ${....num_threads}
+    solver_type: ${....solver_type}
+    use_gpu: ${eq:${....sim_device},"gpu"} # set to False to run on CPU
+    solver_position_iteration_count: 4
+    solver_velocity_iteration_count: 1
+    contact_offset: 0.01
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.2
+    friction_offset_threshold: 0.04
+    friction_correlation_distance: 0.025
+    enable_sleeping: True
+    enable_stabilization: True
+    max_depenetration_velocity: 100.0
+
+    # GPU buffers
+    gpu_max_rigid_contact_count: 524288
+    gpu_max_rigid_patch_count: 163840 # 81920
+    gpu_found_lost_pairs_capacity: 4194304 # 1024
+    gpu_found_lost_aggregate_pairs_capacity: 35629056 # 262144
+    gpu_total_aggregate_pairs_capacity: 4194304 # 1024
+    gpu_max_soft_body_contacts: 1048576
+    gpu_max_particle_contacts: 1048576
+    gpu_heap_capacity: 134217728 # 67108864
+    gpu_temp_buffer_capacity: 33554432 # 16777216
+    gpu_max_num_partitions: 8
+ 
+  Softleg: 
+    # -1 to use default values
+    override_usd_defaults: False
+    enable_self_collisions: False
+    enable_gyroscopic_forces: False
+    # also in stage params
+    # per-actor
+    solver_position_iteration_count: 4
+    solver_velocity_iteration_count: 1
+    sleep_threshold: 0.005
+    stabilization_threshold: 0.001
+    # per-body
+    density: -1
+    max_depenetration_velocity: 100.0
+    # # per-shape
+    contact_offset: 0.02
+    rest_offset: 0.0
