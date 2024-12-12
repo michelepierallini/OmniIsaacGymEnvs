@@ -156,7 +156,7 @@ class FishingRodTaskPosDue(RLTask):
     def get_noise_scale_vec(self, cfg):
         noise_vec = torch.zeros_like(self.obs_buf[0])
         self._add_noise = self._task_cfg["env"]["learn"]["addNoise"]
-        
+        ###  
         # noise_vec[0] = 0
         noise_vec[0] = self._task_cfg["env"]["learn"]["qNoise"] * self.noise_level * self._action_scale 
         noise_vec[1] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._q_dot_scale 
