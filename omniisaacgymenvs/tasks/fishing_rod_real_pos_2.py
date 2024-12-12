@@ -152,6 +152,12 @@ class FishingRodTaskPosDue(RLTask):
         print('=======================================================================================================')
         print('\n\n')
         return
+            
+    def generate_trajectory(self, time, half_period=0.5, scale=0.1):
+        '''Generate a sinusoidal trajectory with a given half period and scale.
+        Suppose to help the first joint within the motion.'''
+        trajectory = scale * (1 - torch.cos((2 * torch.pi / half_period) * time))        
+        return trajectory
     
     def get_noise_scale_vec(self, cfg):
         noise_vec = torch.zeros_like(self.obs_buf[0])
@@ -264,17 +270,6 @@ class FishingRodTaskPosDue(RLTask):
         self.tip_pos_old = self.tip_pos
         
         self.refresh_dof_state_tensors()
-        ## old observation
-        # self.obs_buf[:, 0] = self.actions[:, 0] 
-        # self.obs_buf[:, 1 : 4] = self.tip_vel_lin / self._vel_lin_scale
-        # self.obs_buf[:, 4 : 7] = self.tip_pos / self._pos_scale
-        # self.obs_buf[:, 7 : 10] = self.tip_pos_old / self._pos_scale
-        # self.obs_buf[:, 10 : 13] = self.tip_vel_lin_old / self._vel_lin_scale
-        # self.obs_buf[:, 13] = self._pos_des / self._pos_scale
-        # self.obs_buf[:, 14] = self._vel_lin_des / self._vel_lin_scale
-        # self.obs_buf[:, 15] = self._err_vel_all[:, self.progress_buf[0] - 1]
-        # self.obs_buf[:, 16] = self._err_pos_all[:, self.progress_buf[0] - 1] 
-        # self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
         
         ## FishingRodPos_X_000_pos_new_2_vel
         self.obs_buf[:, 0] = self.actions[:, 0] 
@@ -312,9 +307,13 @@ class FishingRodTaskPosDue(RLTask):
                 #     # self.actions = torch.where(self.dof_pos[:, 0] < self.torch_deg_sat, self.actions * 0, self.actions)
                 #     self.actions[:, 0] = self.torch_deg_sat / self._action_scale
                             
-                ## setting the position of the motor and the consequence torque     
+                ## setting the position of the motor and the torque     
                 torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] ) \
                         - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
+                
+                # torques = torch.clip( 
+                #         self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + self.generate_trajectory(self.progress_buf[0] * self._dt)) \
+                #         - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
 
                 self.torques_to_print = torques
                 self.torques_all[:, 0] = torques
