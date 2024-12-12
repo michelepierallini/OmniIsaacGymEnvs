@@ -185,6 +185,7 @@ class FishingRodTaskPosDue(RLTask):
         if self.WANNA_MASS_CHANGE:
             self.update_tip_mass_all()
     
+    
     def update_tip_mass_all(self):
         for i in range(self._num_envs):
             # for env_id in env_ids:
