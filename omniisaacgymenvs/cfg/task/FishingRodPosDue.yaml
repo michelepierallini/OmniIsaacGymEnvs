@@ -1,5 +1,5 @@
 # used to create the object
-name: FishingRodPos
+name: FishingRodPosDue
 
 physics_engine: ${..physics_engine}
 
@@ -18,7 +18,7 @@ env:
   lengthFishingRod: 2.9417 # [m]
   lengthFishingY: 0.0700   # [m]
   whenToPrint: 20
-  numObservations: 18
+  numObservations: 9
   numActions: 1
   # targetPosDes: 2.8 # [m] X component 
   # targetVelDes: 5.0 # [m/s] X component 
@@ -31,25 +31,27 @@ env:
     # damping: [0.006981317]           # [N*m*s/rad] # no use 
     # stiffness: [0.8674531575294935]  # [N*m/rad]   # no use
     
-    stiffness: [1.23]                # [N*m/rad]   # --> FishingRodPos_X_026_real_pos_vel_noise_KD_mass
-    damping: [0.08674531575294935]   # [N*m*s/rad] # --> FishingRodPos_X_026_real_pos_vel_noise_KD_mass
+    stiffness: [1.23]                # [N*m/rad]   # --> FishingRodPos_X_000_pos_new_2_vel
+    damping: [0.08674531575294935]   # [N*m*s/rad] # --> FishingRodPos_X_000_pos_new_2_vel
 
     decimation: 2                      # Number of control action updates @ sim DT per policy DT
     # actionScale: 3.141592653589793   # [rad] 
-    actionScale: 1.0471975511965976  # 60 degrees
-    # actionScale: 1.5707963267948966    # 90 degrees
+    actionScale: 1.0471975511965976    # 60 degrees
+    # actionScale: 1.5707963267948966  # 90 degrees
     
   
   learn:
     # qScale: 3.141592653589793   # [rad]
     qScale: 1.0471975511965976  # [rad]
     # qScale: 1.5707963267948966  # [rad]
-    qDotScale: 50.0             # [rad/s] 
-    actionScale: 20.0           # [Nm]
+    qDotScale: 20.0             # [rad/s] 
+    # actionScale: 20.0           # [Nm]
     addNoise: True
     noiseLevel: 0.1
     qNoise: 0.01
     qDotNoise: 0.01
+    velLinTipNoise: 0.1
+    posTipNoise: 0.01
     velLinTipScale: 50.0       # [m/s]
     velOriTipScale: 10.0       # [deg/s]
     positionTipScale: 3.0      # [m]
@@ -99,7 +101,7 @@ sim:
     gpu_temp_buffer_capacity: 33554432 
     gpu_max_num_partitions: 8
  
-  FishingRodPos: 
+  FishingRodPosDue: 
     # -1 to use default values
     override_usd_defaults: False
     enable_self_collisions: False

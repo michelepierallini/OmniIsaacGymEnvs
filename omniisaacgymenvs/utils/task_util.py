@@ -48,12 +48,12 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.tasks.softleg_jump_tre import SoftlegJumpTaskTre
     # from omniisaacgymenvs.tasks.fishing_rod import FishingRodTask
     from omniisaacgymenvs.tasks.fishing_rod_real import FishingRodTask
-    from omniisaacgymenvs.tasks.fishing_rod_real_pos import FishingRodTaskPos
+    # from omniisaacgymenvs.tasks.fishing_rod_real_pos import FishingRodTaskPos
+    from omniisaacgymenvs.tasks.fishing_rod_real_pos_2 import FishingRodTaskPosDue
     from omniisaacgymenvs.tasks.softleg_jump_quattro import SoftlegJumpTaskQuattro
     from omniisaacgymenvs.tasks.softleg_jump_cinque import SoftlegJumpTaskCinque
 
 
-    
     # Mappings from strings to environments
     task_map = {
         "AllegroHand": AllegroHandTask,
@@ -79,7 +79,8 @@ def initialize_task(config, env, init_sim=True):
         "SoftlegJumpQuattro" : SoftlegJumpTaskQuattro,
         "SoftlegJumpCinque" : SoftlegJumpTaskCinque,
         "FishingRod" : FishingRodTask, 
-        "FishingRodPos": FishingRodTaskPos
+        # "FishingRodPos": FishingRodTaskPos
+        "FishingRodPosDue" : FishingRodTaskPosDue,
         }
 
     from .config_utils.sim_config import SimConfig

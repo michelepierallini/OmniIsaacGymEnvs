@@ -20,23 +20,24 @@ import torch
 ## 6. Add model-based DDP initial guess 
 ####################################################################################################################################
 
-class FishingRodTaskPos(RLTask):
+class FishingRodTaskPosDue(RLTask):
     def __init__(
         self,
         name,
         sim_config,
         env,
         n_joints=22,
-        n_actuators=1,
         WANNA_INFO=False,
-        tracking_Z=False 
+        tracking_Z=False, 
+        WANNA_MASS_CHANGE=False
     ) -> None:
         
         self._sim_config = sim_config
         self._cfg = sim_config.config
         self.WANNA_INFO = WANNA_INFO
+        self.WANNA_MASS_CHANGE = WANNA_MASS_CHANGE
         self._task_cfg = sim_config.task_config
-        self._n_actuators = n_actuators
+        self._n_actuators = self._task_cfg["env"]["numActions"]
         self._n_joints = n_joints
         self._n_state = 2 * self._n_joints
         self._device = 'cuda:0'
@@ -47,12 +48,10 @@ class FishingRodTaskPos(RLTask):
         self._num_envs = self._task_cfg["env"]["numEnvs"]
         self._env_spacing = self._task_cfg["env"]["envSpacing"] 
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
-        # amp = 2 * 0.25 ## look how it behaveves # FishingRodPos_X_027_real_pos_vel_noise_KD_mass_plus_KD
-        amp = 0.25 ## look how it behaveves # --> FishingRodPos_X_027_real_pos_vel_noise_KD_mass_KD_PD
-        # k_ii = amp # all BUT FishingRodPos_X_028_real_pos_vel_noise_KD_mass_KD, which has k_ii = 0.5 * amp 
-        k_ii = 0.5 * amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
+        amp = 0.25 
+        k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        d_ii = 2 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
+        d_ii = amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
@@ -130,12 +129,11 @@ class FishingRodTaskPos(RLTask):
                             "joint_vel": torch_zeros(), "joint_pos": torch_zeros()}
         
         ## desired task 
-        # self.min_vel_lin_des, self.max_vel_lin_des = 5.0, 5.0  # [m/s] only one component # FishingRodPos_X_020_real_pos
-        self.min_vel_lin_des, self.max_vel_lin_des = 3.0, 8.0    # [m/s] only one component # FishingRodPos_X_022_real_pos_vel
+        self.min_vel_lin_des, self.max_vel_lin_des = 3.0, 8.0    # [m/s] only one component
         self._min_mass_tip, self._max_mass_tip = 0.0, 0.03 # [Kg]
         self.new_mass = self._min_mass_tip + (self._max_mass_tip - self._min_mass_tip) * torch.rand(self._num_envs, device=self._device)
         if self.tracking_Z_bool:
-            self.min_pos_des, self.max_pos_des = 0.1, 0.4 # 0.5, 1.0 # [m]    Z-component 
+            self.min_pos_des, self.max_pos_des = 0.1, 0.4   # Z-component 
             self._pos_des = self._length_fishing_rod - torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
         else:
         ## tracking X
@@ -158,18 +156,18 @@ class FishingRodTaskPos(RLTask):
     def get_noise_scale_vec(self, cfg):
         noise_vec = torch.zeros_like(self.obs_buf[0])
         self._add_noise = self._task_cfg["env"]["learn"]["addNoise"]
-        noise_vec[0] = 0
-        # noise_vec[0] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._action_scale 
-        noise_vec[1 : 4] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._vel_lin_scale
-        noise_vec[4 : 7] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._pos_scale
-        noise_vec[7] = 0
-        noise_vec[7 : 10] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._pos_scale
-        noise_vec[10 : 13] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._vel_lin_scale
-        noise_vec[14] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._vel_lin_scale
-        noise_vec[15] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._pos_scale
-        noise_vec[16] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._vel_lin_scale
-        noise_vec[-1] = 0
- 
+        
+        # noise_vec[0] = 0
+        noise_vec[0] = self._task_cfg["env"]["learn"]["qNoise"] * self.noise_level * self._action_scale 
+        noise_vec[1] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._q_dot_scale 
+        noise_vec[2] = self._task_cfg["env"]["learn"]["velLinTipNoise"] * self.noise_level * self._vel_lin_scale
+        noise_vec[3] = self._task_cfg["env"]["learn"]["posTipNoise"] * self.noise_level * self._pos_scale
+        noise_vec[4] = self._task_cfg["env"]["learn"]["posTipNoise"] * self.noise_level * self._pos_scale
+        noise_vec[5] = self._task_cfg["env"]["learn"]["velLinTipNoise"] * self.noise_level * self._vel_lin_scale
+        noise_vec[6] = 0
+        noise_vec[7] = 0  
+        noise_vec[-1] = 0 # time
+    
         return noise_vec
     
     def set_up_scene(self, scene) -> None:
@@ -184,7 +182,8 @@ class FishingRodTaskPos(RLTask):
         scene.add(self._fishingrods)
         scene.add(self._fishingrods._tip)
         scene.add(self._fishingrods._base)
-        self.update_tip_mass_all()
+        if self.WANNA_MASS_CHANGE:
+            self.update_tip_mass_all()
     
     def update_tip_mass_all(self):
         for i in range(self._num_envs):
@@ -200,12 +199,11 @@ class FishingRodTaskPos(RLTask):
                 if not mass_attr:
                     mass_attr = mass_api.CreateMassAttr()
                 mass_attr.Set(self.new_mass[i].item())
-                # print(f"Set new mass for {tip_path} in environment {env_id} to {self.new_mass[env_id].item()}")
             else:
                 pass
 
     def get_fishingrod(self):
-        ## The fishing rod appeared to be in [0.0000, 0.0700, 2.9417]
+        ## The fishing rod appears to be in [0.0000, 0.0700, 2.9417]
         self._init_state = torch.tensor(self._init_state, dtype=torch.float, device=self._device, requires_grad=False)
         fishingrod = FishingRod(prim_path=self.default_zero_env_path + "/fishingrod", name="FishingRod")
         self._sim_config.apply_articulation_settings("FishingRod",
@@ -265,15 +263,35 @@ class FishingRodTaskPos(RLTask):
         self.tip_pos_old = self.tip_pos
         
         self.refresh_dof_state_tensors()
+        ## old observation
+        # self.obs_buf[:, 0] = self.actions[:, 0] 
+        # self.obs_buf[:, 1 : 4] = self.tip_vel_lin / self._vel_lin_scale
+        # self.obs_buf[:, 4 : 7] = self.tip_pos / self._pos_scale
+        # self.obs_buf[:, 7 : 10] = self.tip_pos_old / self._pos_scale
+        # self.obs_buf[:, 10 : 13] = self.tip_vel_lin_old / self._vel_lin_scale
+        # self.obs_buf[:, 13] = self._pos_des / self._pos_scale
+        # self.obs_buf[:, 14] = self._vel_lin_des / self._vel_lin_scale
+        # self.obs_buf[:, 15] = self._err_vel_all[:, self.progress_buf[0] - 1]
+        # self.obs_buf[:, 16] = self._err_pos_all[:, self.progress_buf[0] - 1] 
+        # self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
+        
+        ## FishingRodPos_X_000_pos_new_2_vel
         self.obs_buf[:, 0] = self.actions[:, 0] 
-        self.obs_buf[:, 1 : 4] = self.tip_vel_lin / self._vel_lin_scale
-        self.obs_buf[:, 4 : 7] = self.tip_pos / self._pos_scale
-        self.obs_buf[:, 7 : 10] = self.tip_pos_old / self._pos_scale
-        self.obs_buf[:, 10 : 13] = self.tip_vel_lin_old / self._vel_lin_scale
-        self.obs_buf[:, 13] = self._pos_des / self._pos_scale
-        self.obs_buf[:, 14] = self._vel_lin_des / self._vel_lin_scale
-        self.obs_buf[:, 15] = self._err_vel_all[:, self.progress_buf[0] - 1]
-        self.obs_buf[:, 16] = self._err_pos_all[:, self.progress_buf[0] - 1] 
+        self.obs_buf[:, 1] = self.dof_vel[:, 0] / self._q_dot_scale
+        
+        if self.tracking_Z_bool:
+            self.obs_buf[:, 2] = self.tip_vel_lin[:, -1] / self._vel_lin_scale
+            self.obs_buf[:, 3] = self.tip_pos[:, -1] / self._pos_scale
+            self.obs_buf[:, 4] = self.tip_pos_old[:, -1] / self._pos_scale
+            self.obs_buf[:, 5] = self.tip_vel_lin_old[:, -1] / self._vel_lin_scale
+        else:
+            self.obs_buf[:, 2] = self.tip_vel_lin[:, 0] / self._vel_lin_scale
+            self.obs_buf[:, 3] = self.tip_pos[:, 0] / self._pos_scale
+            self.obs_buf[:, 4] = self.tip_pos_old[:, 0] / self._pos_scale
+            self.obs_buf[:, 5] = self.tip_vel_lin_old[:, 0] / self._vel_lin_scale
+            
+        self.obs_buf[:, 6] = self._err_vel_all[:, self.progress_buf[0] - 1]
+        self.obs_buf[:, 7] = self._err_pos_all[:, self.progress_buf[0] - 1] 
         self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
         
         observations = {self._fishingrods.name: {"obs_buf": self.obs_buf}}
@@ -302,9 +320,6 @@ class FishingRodTaskPos(RLTask):
                 torques = self.torques_all
                 stiffness_torque = torch.matmul(self.dof_pos, self.K_matrix.t()).detach().requires_grad_(True).to(dtype=torch.float, device=self._device)
                 damping_torque = torch.matmul(self.dof_vel, self.D_matrix.t()).detach().requires_grad_(True).to(dtype=torch.float, device=self._device)
-                # FishingRodPos_X_020_real_pos and FishingRodPos_X_022_real_pos_vel
-                # friction_air_torque = self.noise_level * torch.rand(self._num_envs, self._n_joints, dtype=torch.float, device=self._device, requires_grad=False) / 1e4
-                # FishingRodPos_X_025_real_pos_vel_noise_KD, FishingRodPos_X_026_real_pos_vel_noise_KD_mass
                 friction_air_torque = ( self.noise_level / 1e1 ) * ( 2 * torch.rand(self._num_envs, self._n_joints, dtype=torch.float, device=self._device, requires_grad=False) - 1) \
                     * self.d_ii_vect.unsqueeze(0).expand(self._num_envs, -1) # eventually put directly stiffness_torque or damping torque
                     
@@ -378,8 +393,8 @@ class FishingRodTaskPos(RLTask):
         
         self._env._world.step(render=self._env._render)
         self.refresh_dof_state_tensors()
-        ## from FishingRodPos_X_026_real_pos_vel_noise_KD_mass
-        self.update_tip_mass_all()
+        if self.WANNA_MASS_CHANGE:
+            self.update_tip_mass_all()
         
         # bookkeeping
         self.reset_buf[env_ids] = 1
@@ -463,26 +478,7 @@ class FishingRodTaskPos(RLTask):
             self.tip_pos_save = torch.cat([self.tip_pos_save, self.tip_pos], dim=1) 
             self.tip_vel_save = torch.cat([self.tip_vel_save, self.tip_vel_lin], dim=1) 
             self._pos_des_save_3D = torch.cat([self._pos_des_save_3D, self._ball_position], dim=1) 
-            self._vel_lin_des_save = torch.cat([self._vel_lin_des_save, self._vel_lin_des.unsqueeze(1)], dim=1)
-              
-        #################################################################################
-        ## reward wrt the closet on the all episode
-        #################################################################################
-        # if (self.progress_buf * self._dt >= self._max_episode_length_s).all():
-        #     # non_zero_indices = (self._err_pos_all != 0).any(dim=1)
-        #     # self._err_pos_all = self._err_pos_all[non_zero_indices]
-        #     err_reached_pos, index_min_err = torch.min(self._err_pos_all, dim= 1,  keepdim=True) 
-        #     err_reached_vel = self._err_vel_all[torch.arange(self._err_vel_all.size(0)), index_min_err.squeeze(1)]
-        #     err_reached_pos = err_reached_pos.squeeze(1)
-        #     self.episode_sums["err_pos"] = err_reached_pos
-        #     self.episode_sums["err_vel"] = err_reached_vel
-        #     self.episode_sums["velocity_final"] = self.tip_vel_lin
-        #     self.episode_sums["final_config"] = self.tip_pos
-        #     self.episode_sums["joint_pos"] = self.dof_pos 
-        #     self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
-        #################################################################################
-        ## reward wrt the closet at the final time instant of the episode 
-        #################################################################################      
+            self._vel_lin_des_save = torch.cat([self._vel_lin_des_save, self._vel_lin_des.unsqueeze(1)], dim=1)   
                   
         if (self.progress_buf * self._dt >= self._max_episode_length_s).all():
         
