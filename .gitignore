@@ -68,3 +68,7 @@ omniisaacgymenvs/tasks/warp/
 omniisaacgymenvs/tests/
 omniisaacgymenvs/utils/rlgames/rlgames_train_mt.py
 omniisaacgymenvs/views/
+
+omniisaacgymenvs/task/fishing_rod_real_pos.py
+omniisaacgymenvs/cfg/task/FishingRodPos.yaml
+omniisaacgymenvs/cfg/train/FishingRodPosPPO.yaml
