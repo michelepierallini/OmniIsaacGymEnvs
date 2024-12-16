@@ -18,7 +18,7 @@ env:
   lengthFishingRod: 2.9417 # [m]
   lengthFishingY: 0.0700   # [m]
   whenToPrint: 20
-  numObservations: 9
+  numObservations: 11 # added acc tip
   numActions: 1
   switchCV: 300
   # targetPosDes: 2.8 # [m] X component 
@@ -59,13 +59,17 @@ env:
     # qScale: 1.5707963267948966  # [rad]
     qDotScale: 20.0             # [rad/s] 
     # actionScale: 20.0           # [Nm]
+    qDDotScale: 200.0           # [rad/s^2]
     addNoise: True
     noiseLevel: 0.1
     qNoise: 0.01
     qDotNoise: 0.01
+    qDDotNoise: 0.1
     velLinTipNoise: 0.1
+    accLinTipNoise: 1.0
     posTipNoise: 0.01
     velLinTipScale: 50.0       # [m/s]
+    accLinTipScale: 500.0      # [m/s^2]
     velOriTipScale: 10.0       # [deg/s]
     positionTipScale: 3.0      # [m]
     orientationTipScale: 360.0 # [deg]

@@ -104,6 +104,9 @@ class FishingRodTaskPosDueCV(RLTask):
         self._max_episode_length_s = self._task_cfg["env"]["episodeLength"] 
         self._init_state = self._task_cfg["env"]["initState"]["q"]
         self.noise_level = self._task_cfg["env"]["learn"]["noiseLevel"]
+        
+        self._acc_scale = self._task_cfg["env"]["learn"]["accLinTipScale"]
+        self._acc_noise = self._task_cfg["env"]["learn"]["accLinTipNoise"]
                 
         self.rew_scales = {}        
         for key in self.rew_scales.keys():
@@ -127,6 +130,11 @@ class FishingRodTaskPosDueCV(RLTask):
         self._last_joint_vel = torch.zeros(self._num_envs, self._n_joints, dtype=torch.float, device=self._device, requires_grad=False)
         torch_zeros = lambda : torch.zeros(self._num_envs, dtype=torch.float, device=self._device, requires_grad=False)
         self.torques_all = torch.zeros(self._num_envs, self._n_joints, dtype=torch.float, device=self._device, requires_grad=False)
+        
+        self.tip_acc_lin = torch.zeros(self._num_envs, dtype=torch.float, device=self._device, requires_grad=False)
+        self.tip_acc_lin_old = torch.zeros_like(self.tip_acc_lin)
+        self.tip_vel_lin_old = torch.zeros_like(self.tip_acc_lin)
+        self.tip_pos_old = torch.zeros_like(self.tip_acc_lin)
         
         self.episode_sums = {"err_pos": torch_zeros(), 
                              "torque": torch_zeros(), 
@@ -180,6 +188,8 @@ class FishingRodTaskPosDueCV(RLTask):
         noise_vec[5] = self._task_cfg["env"]["learn"]["velLinTipNoise"] * self.noise_level * self._vel_lin_scale
         noise_vec[6] = 0
         noise_vec[7] = 0  
+        noise_vec[8] = self._task_cfg["env"]["learn"]["accLinTipNoise"] * self.noise_level * self._acc_scale
+        noise_vec[9] = self._task_cfg["env"]["learn"]["accLinTipNoise"] * self.noise_level * self._acc_scale
         noise_vec[-1] = 0 # time
     
         return noise_vec
@@ -275,8 +285,14 @@ class FishingRodTaskPosDueCV(RLTask):
          
         self.tip_vel_lin_old = self.tip_vel_lin
         self.tip_pos_old = self.tip_pos
+        self.tip_acc_lin_old = self.tip_acc_lin
         
         self.refresh_dof_state_tensors()
+        
+        if self.tracking_Z_bool:
+            self.tip_acc_lin = (self.tip_vel_lin[:, -1] - self.tip_vel_lin_old[:, -1]) / self._dt
+        else:
+            self.tip_acc_lin = (self.tip_vel_lin[:, 0] - self.tip_vel_lin_old[:, 0]) / self._dt
         
         ## FishingRodPos_X_000_pos_new_2_vel
         self.obs_buf[:, 0] = self.actions[:, 0] 
@@ -292,9 +308,15 @@ class FishingRodTaskPosDueCV(RLTask):
             self.obs_buf[:, 3] = self.tip_pos[:, 0] / self._pos_scale
             self.obs_buf[:, 4] = self.tip_pos_old[:, 0] / self._pos_scale
             self.obs_buf[:, 5] = self.tip_vel_lin_old[:, 0] / self._vel_lin_scale
-            
+    
+        # self.obs_buf[:, 6] = self._err_vel_all[:, self.progress_buf[0] - 1]
+        # self.obs_buf[:, 7] = self._err_pos_all[:, self.progress_buf[0] - 1] 
+        # self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
+        
         self.obs_buf[:, 6] = self._err_vel_all[:, self.progress_buf[0] - 1]
         self.obs_buf[:, 7] = self._err_pos_all[:, self.progress_buf[0] - 1] 
+        self.obs_buf[:, 8] = self.tip_acc_lin[:] / self._acc_scale
+        self.obs_buf[:, 9] = self.tip_acc_lin_old[:] / self._acc_scale
         self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
         
         observations = {self._fishingrods.name: {"obs_buf": self.obs_buf}}
