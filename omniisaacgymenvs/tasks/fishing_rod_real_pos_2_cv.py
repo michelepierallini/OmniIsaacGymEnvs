@@ -12,15 +12,16 @@ import torch
 
 ####################################################################################################################################
 ## TODO 
-## 1. Add randomization of the mass on tip of the robot --> mass FishingRodPos_X_024_real_pos_vel_noise_KD ( no 2. )
-## 2. Increase randomization damping of the joints --> stiffness FishingRodPos_X_023_real_pos_vel_noise_KD
+## Implemnting cv:
+## i) fixing velocity and setting position
+## ii) fixing position and  and setting velocity
+## 1. Add the \ddot{X} (or \ddot{Z}) term in the observation and the adding noise
 ## 3. Add randomization on action of the motor
-## 4. Add randomization of the initial position of the robot mobile base - like --> q_1
-## 5. Reduce obs --> motion is JUST onto X - useless
 ## 6. Add model-based DDP initial guess 
+## 7. All the constant has to be put in the yaml file or what is the point of having it?
 ####################################################################################################################################
 
-class FishingRodTaskPosDue(RLTask):
+class FishingRodTaskPosDueCV(RLTask):
     def __init__(
         self,
         name,
@@ -48,6 +49,7 @@ class FishingRodTaskPosDue(RLTask):
         self._num_envs = self._task_cfg["env"]["numEnvs"]
         self._env_spacing = self._task_cfg["env"]["envSpacing"] 
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
+        self.WANNA_MODEL_BASED_HELP = False
         amp = 0.25 
         k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
@@ -66,6 +68,8 @@ class FishingRodTaskPosDue(RLTask):
         self._ball_radius = 0.05
         self._ball_position = torch.zeros(self._num_envs, 3, dtype=torch.float, device=self._device, requires_grad=False)
         self.epoch_num = 0
+        self.epoch_num_save = 0
+        self._when_to_switch = 300 # number of epoch afert which I try to set both the position and the velocity
         if self._cfg["test"]:
             import os 
             self.filename_2save = os.path.splitext(os.path.basename(self._cfg['checkpoint']))[0]
@@ -124,9 +128,12 @@ class FishingRodTaskPosDue(RLTask):
         torch_zeros = lambda : torch.zeros(self._num_envs, dtype=torch.float, device=self._device, requires_grad=False)
         self.torques_all = torch.zeros(self._num_envs, self._n_joints, dtype=torch.float, device=self._device, requires_grad=False)
         
-        self.episode_sums = {"err_pos": torch_zeros(), "torque": torch_zeros(), "err_vel": torch_zeros(),
-                            "action_rate": torch_zeros(), "velocity_final": torch_zeros(), "joint_acc": torch_zeros(), 
-                            "joint_vel": torch_zeros(), "joint_pos": torch_zeros()}
+        self.episode_sums = {"err_pos": torch_zeros(), 
+                             "torque": torch_zeros(), 
+                             "err_vel": torch_zeros(),
+                            "action_rate": torch_zeros(), 
+                            "velocity_final": torch_zeros(), 
+                            "joint_acc": torch_zeros(), "joint_vel": torch_zeros(), "joint_pos": torch_zeros()}
         
         ## desired task 
         self.min_vel_lin_des, self.max_vel_lin_des = 3.0, 8.0    # [m/s] only one component
@@ -139,16 +146,18 @@ class FishingRodTaskPosDue(RLTask):
         ## tracking X
             self.min_pos_des, self.max_pos_des = 0.4, 0.8
             self._pos_des = torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
+        
         self._vel_lin_des = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
         self.des_y_coordinate = torch.sqrt(self._length_fishing_rod**2 - self._pos_des**2)
         
+        print('\n')
         print('=======================================================================================================')
         if self.min_pos_des != self.max_pos_des:
             print('[INFO]: Desired Positions is changing any epoch')
             if ~self.tracking_Z_bool:
                 print('[INFO]: The point is simmetric w.r.t. the fishing rod')
         if self.min_vel_lin_des != self.max_vel_lin_des:
-            print('[INFO]: Desired Velocity is changing any epoch')
+            print('[INFO]: Desired Velocity is changing any epoch after 500 epochs')
         print('=======================================================================================================')
         print('\n\n')
         return
@@ -162,8 +171,7 @@ class FishingRodTaskPosDue(RLTask):
     def get_noise_scale_vec(self, cfg):
         noise_vec = torch.zeros_like(self.obs_buf[0])
         self._add_noise = self._task_cfg["env"]["learn"]["addNoise"]
-        ###  
-        # noise_vec[0] = 0
+        # noise_vec[0] = 0 ## no noise action
         noise_vec[0] = self._task_cfg["env"]["learn"]["qNoise"] * self.noise_level * self._action_scale 
         noise_vec[1] = self._task_cfg["env"]["learn"]["qDotNoise"] * self.noise_level * self._q_dot_scale 
         noise_vec[2] = self._task_cfg["env"]["learn"]["velLinTipNoise"] * self.noise_level * self._vel_lin_scale
@@ -190,7 +198,6 @@ class FishingRodTaskPosDue(RLTask):
         scene.add(self._fishingrods._base)
         if self.WANNA_MASS_CHANGE:
             self.update_tip_mass_all()
-    
     
     def update_tip_mass_all(self):
         for i in range(self._num_envs):
@@ -299,18 +306,20 @@ class FishingRodTaskPosDue(RLTask):
         if not self._env._world.is_playing():
             return
         
-        self.actions[:,:] = actions.clone().to(self._device)        
+        self.actions[:,:] = actions.clone().to(self._device) 
+        help_term = torch.zeros(self._num_envs, dtype=torch.float, device=self._device)
         for _ in range(self._decimation):  
             if self._env._world.is_playing():   
+                
+                if self.WANNA_MODEL_BASED_HELP:
+                    help_term = self.generate_trajectory(self.progress_buf[0] * self._dt) * torch.ones(self._num_envs, dtype=torch.float, device=self._device)
+                else:
+                    pass
                             
                 ## setting the position of the motor and the torque     
-                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] ) \
+                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) \
                         - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
-                
-                # torques = torch.clip( 
-                #         self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + self.generate_trajectory(self.progress_buf[0] * self._dt)) \
-                #         - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
-
+            
                 self.torques_to_print = torques
                 self.torques_all[:, 0] = torques
                 torques = self.torques_all
@@ -371,8 +380,12 @@ class FishingRodTaskPosDue(RLTask):
         else:
             self._pos_des[env_ids] = (self.max_pos_des - self.min_pos_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_pos_des
         
-        self._vel_lin_des[env_ids] = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
+        if self.epoch_num > self._when_to_switch:
+            self._vel_lin_des[env_ids] = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
+        else:
+            self._vel_lin_des[env_ids] =  ( ( self.max_vel_lin_des + self.min_vel_lin_des) / 2 ) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
 
+            
         ## I am not initizializing these, which is bad but I don't care 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
@@ -403,8 +416,10 @@ class FishingRodTaskPosDue(RLTask):
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
             self.extras["episode"]['rew_' + key] = torch.mean(self.episode_sums[key][env_ids]) / self._max_episode_length_s
-            self.episode_sums[key][env_ids] = 0.0
+            self.episode_sums[key][env_ids] = 0.0  
             
+                
+                
     def post_reset(self):
         
         self._num_dof = self._n_joints
@@ -439,7 +454,7 @@ class FishingRodTaskPosDue(RLTask):
                 print(self.obs_buf.isnan().any(dim=0).nonzero(as_tuple=False).flatten())
             if self._add_noise:
                 self.obs_buf += torch.rand_like(self.obs_buf) * self._noise_scale_vec
-
+            
             self._last_actions[:] = self.actions[:]
             self._last_config[:] = self.dof_pos[:]   
             self._last_joint_vel[:] = self.dof_vel[:]        
@@ -477,7 +492,7 @@ class FishingRodTaskPosDue(RLTask):
             self._vel_lin_des_save = torch.cat([self._vel_lin_des_save, self._vel_lin_des.unsqueeze(1)], dim=1)   
                   
         if (self.progress_buf * self._dt >= self._max_episode_length_s).all():
-        
+            self.epoch_num += 1
             self.episode_sums["err_pos"] = err_reached_pos[:]
             self.episode_sums["err_vel"] = err_reached_vel[:]
             self.episode_sums["velocity_final"] = self.tip_vel_lin[:]
@@ -507,10 +522,10 @@ class FishingRodTaskPosDue(RLTask):
                 input('[INFO] check ...')
                 print('=======================================================================================================')
                 self.my_callback_testing_each_env(self.filename_2save)
-                    
-                self.epoch_num += 1
+                self.epoch_num_save += 1
                 if self._count % 10 == 0 and self.WANNA_INFO and self._cfg["test"]:
                     input('check prints ...')
+                    
         else:
             pass
         
@@ -554,7 +569,7 @@ class FishingRodTaskPosDue(RLTask):
                     csvwriter = csv.writer(csvfile)
                     csvwriter.writerow(new_mass_cpu.tolist())
         
-        epoch_folder = os.path.join(name_folder, str(self.epoch_num))
+        epoch_folder = os.path.join(name_folder, str(self.epoch_num_save))
         if not os.path.exists(epoch_folder):
             os.makedirs(epoch_folder)        
         
@@ -572,7 +587,7 @@ class FishingRodTaskPosDue(RLTask):
                     self.actions_save[i.item(),:], self.tip_pos_save[i.item(),:], \
                     self.tip_vel_save[i.item(),:], self._pos_des_save_3D[i.item(),:], \
                     self._vel_lin_des_save[i.item(),:]]
-            self.my_plot_rn(self.tip_pos_save[i.item(),:], self.tip_vel_save[i.item(),:], self.actions_save[i.item(),:], self.epoch_num, env_folder)
+            self.my_plot_rn(self.tip_pos_save[i.item(),:], self.tip_vel_save[i.item(),:], self.actions_save[i.item(),:], self.epoch_num_save, env_folder)
 
             for tensor, file_name in zip(tensors, file_names):
                 file_path = os.path.join(env_folder, file_name)

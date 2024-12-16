@@ -1,0 +1,120 @@
+# used to create the object
+name: FishingRodPosDueCV
+
+physics_engine: ${..physics_engine}
+
+# if given, will override the device setting in gym. 
+env:
+  numEnvs: ${resolve_default:128,${...num_envs}}
+  envSpacing: 3.0 
+  resetDist: 3.0  
+  maxEffort: 20.0
+  clipObservations: 50.0 
+  clipActions: 20.0 # [Nm] EM-Act
+  controlFrequencyInv: 0 # 100 Hz, 2 60 Hz ## control decimation, i.e., how many simulator steps between RL actions
+  # controlFrequencyInvReal: 2 # 002 when setting torques this is mandatory
+  controlFrequencyInvReal: 1   # 003
+  episodeLength: 1.0 # [s] 
+  lengthFishingRod: 2.9417 # [m]
+  lengthFishingY: 0.0700   # [m]
+  whenToPrint: 20
+  numObservations: 9
+  numActions: 1
+  # targetPosDes: 2.8 # [m] X component 
+  # targetVelDes: 5.0 # [m/s] X component 
+
+  initState:
+    q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
+    qDot: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
+  
+  control:
+    # damping: [0.006981317]           # [N*m*s/rad] # no use 
+    # stiffness: [0.8674531575294935]  # [N*m/rad]   # no use
+    
+    stiffness: [1.23]                # [N*m/rad]   # --> FishingRodPos_X_000_pos_new_2_vel
+    damping: [0.08674531575294935]   # [N*m*s/rad] # --> FishingRodPos_X_000_pos_new_2_vel
+
+    decimation: 2                      # Number of control action updates @ sim DT per policy DT
+    # actionScale: 3.141592653589793   # [rad] 
+    actionScale: 1.0471975511965976    # 60 degrees
+    # actionScale: 1.5707963267948966  # 90 degrees
+    
+  
+  learn:
+    # qScale: 3.141592653589793   # [rad]
+    qScale: 1.0471975511965976  # [rad]
+    # qScale: 1.5707963267948966  # [rad]
+    qDotScale: 20.0             # [rad/s] 
+    # actionScale: 20.0           # [Nm]
+    addNoise: True
+    noiseLevel: 0.1
+    qNoise: 0.01
+    qDotNoise: 0.01
+    velLinTipNoise: 0.1
+    posTipNoise: 0.01
+    velLinTipScale: 50.0       # [m/s]
+    velOriTipScale: 10.0       # [deg/s]
+    positionTipScale: 3.0      # [m]
+    orientationTipScale: 360.0 # [deg]
+
+sim:
+  dt: 0.005 # 0.002
+  use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
+  gravity: [0.0, 0.0, -9.81]
+  add_ground_plane: True
+  add_distant_light: True
+  use_flatcache: True
+  enable_scene_query_support: False
+  disable_contact_processing: True
+  # set to True if you use camera sensors in the environment
+  enable_cameras: False
+
+  default_physics_material:
+    static_friction: 1.0
+    dynamic_friction: 1.0
+    restitution: 0.0
+
+  physx:
+    worker_thread_count: ${....num_threads}
+    solver_type: ${....solver_type}
+    use_gpu: ${eq:${....sim_device},"gpu"} # set to False to run on CPU
+    solver_position_iteration_count: 4
+    solver_velocity_iteration_count: 1
+    contact_offset: 0.01
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.2
+    friction_offset_threshold: 0.04
+    friction_correlation_distance: 0.025
+    enable_sleeping: True
+    enable_stabilization: True
+    max_depenetration_velocity: 100.0
+
+    # GPU buffers
+    gpu_max_rigid_contact_count: 524288
+    gpu_max_rigid_patch_count: 163840 
+    gpu_found_lost_pairs_capacity: 4194304
+    gpu_found_lost_aggregate_pairs_capacity: 35629056
+    gpu_total_aggregate_pairs_capacity: 4194304
+    gpu_max_soft_body_contacts: 1048576
+    gpu_max_particle_contacts: 1048576
+    gpu_heap_capacity: 134217728
+    gpu_temp_buffer_capacity: 33554432 
+    gpu_max_num_partitions: 8
+ 
+  FishingRodPosDueCV: 
+    # -1 to use default values
+    override_usd_defaults: False
+    enable_self_collisions: False
+    enable_gyroscopic_forces: False
+    # also in stage params
+    # per-actor
+    solver_position_iteration_count: 4
+    solver_velocity_iteration_count: 1
+    sleep_threshold: 0.005
+    stabilization_threshold: 0.001
+    # per-body
+    density: -1
+    max_depenetration_velocity: 100.0
+    # per-shape
+    contact_offset: 0.02
+    rest_offset: 0.0
