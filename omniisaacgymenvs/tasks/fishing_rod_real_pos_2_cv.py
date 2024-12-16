@@ -14,7 +14,7 @@ import torch
 ## TODO 
 ## Implemnting cv:
 ## i) fixing velocity and setting position
-## ii) fixing position and  and setting velocity
+## ii) fixing position and setting velocity
 ## 1. Add the \ddot{X} (or \ddot{Z}) term in the observation and the adding noise
 ## 3. Add randomization on action of the motor
 ## 6. Add model-based DDP initial guess 
@@ -50,7 +50,7 @@ class FishingRodTaskPosDueCV(RLTask):
         self._env_spacing = self._task_cfg["env"]["envSpacing"] 
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
         self.WANNA_MODEL_BASED_HELP = False
-        amp = 0.25 
+        amp = self._task_cfg["env"]["initState"]["ampK"] 
         k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
         d_ii = amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
@@ -63,13 +63,13 @@ class FishingRodTaskPosDueCV(RLTask):
         self.K_matrix = self.K_matrix.clone().detach().to(dtype=torch.float, device=self._device).requires_grad_(False)
        
         self.torques_to_print = torch.zeros(self._num_envs, self._n_actuators, dtype=torch.float, device=self._device, requires_grad=False)
-        self.torch_deg_sat = torch.deg2rad(torch.tensor(-60.0)).to(self._device) #  self._task_cfg["env"]["learn"]["qScale"]
+        self.torch_deg_sat = torch.deg2rad(torch.tensor(-self._task_cfg["env"]["initState"]["saveAngle"])).to(self._device) #  self._task_cfg["env"]["learn"]["qScale"]
         ## target ball features 
         self._ball_radius = 0.05
         self._ball_position = torch.zeros(self._num_envs, 3, dtype=torch.float, device=self._device, requires_grad=False)
         self.epoch_num = 0
         self.epoch_num_save = 0
-        self._when_to_switch = 300 # number of epoch afert which I try to set both the position and the velocity
+        self._when_to_switch = self._task_cfg["env"]["switchCV"] # number of epoch afert which I try to set both the position and the velocity
         if self._cfg["test"]:
             import os 
             self.filename_2save = os.path.splitext(os.path.basename(self._cfg['checkpoint']))[0]
@@ -136,15 +136,15 @@ class FishingRodTaskPosDueCV(RLTask):
                             "joint_acc": torch_zeros(), "joint_vel": torch_zeros(), "joint_pos": torch_zeros()}
         
         ## desired task 
-        self.min_vel_lin_des, self.max_vel_lin_des = 3.0, 8.0    # [m/s] only one component
-        self._min_mass_tip, self._max_mass_tip = 0.0, 0.03 # [Kg]
+        self.min_vel_lin_des, self.max_vel_lin_des = self._task_cfg["env"]["task"]["minVelDes"], self._task_cfg["env"]["task"]["maxVelDes"]   # [m/s] only one component
+        self._min_mass_tip, self._max_mass_tip = self._task_cfg["env"]["task"]["minMassTip"], self._task_cfg["env"]["task"]["maxMassTip"] # [Kg]
         self.new_mass = self._min_mass_tip + (self._max_mass_tip - self._min_mass_tip) * torch.rand(self._num_envs, device=self._device)
         if self.tracking_Z_bool:
-            self.min_pos_des, self.max_pos_des = 0.1, 0.4   # Z-component 
+            self.min_pos_des, self.max_pos_des = self._task_cfg["env"]["task"]["minPosDesZ"], self._task_cfg["env"]["task"]["maxPosDesZ"]   # Z-component 
             self._pos_des = self._length_fishing_rod - torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
         else:
         ## tracking X
-            self.min_pos_des, self.max_pos_des = 0.4, 0.8
+            self.min_pos_des, self.max_pos_des = self._task_cfg["env"]["task"]["minPosDesX"], self._task_cfg["env"]["task"]["maxPosDesX"]
             self._pos_des = torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
         
         self._vel_lin_des = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
@@ -157,7 +157,7 @@ class FishingRodTaskPosDueCV(RLTask):
             if ~self.tracking_Z_bool:
                 print('[INFO]: The point is simmetric w.r.t. the fishing rod')
         if self.min_vel_lin_des != self.max_vel_lin_des:
-            print('[INFO]: Desired Velocity is changing any epoch after 500 epochs')
+            print(f'[INFO]: Desired Velocity is changing any epoch after {self._when_to_switch} epochs')
         print('=======================================================================================================')
         print('\n\n')
         return
@@ -418,8 +418,7 @@ class FishingRodTaskPosDueCV(RLTask):
             self.extras["episode"]['rew_' + key] = torch.mean(self.episode_sums[key][env_ids]) / self._max_episode_length_s
             self.episode_sums[key][env_ids] = 0.0  
             
-                
-                
+            
     def post_reset(self):
         
         self._num_dof = self._n_joints

@@ -20,13 +20,26 @@ env:
   whenToPrint: 20
   numObservations: 9
   numActions: 1
+  switchCV: 300
   # targetPosDes: 2.8 # [m] X component 
   # targetVelDes: 5.0 # [m/s] X component 
 
   initState:
     q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
     qDot: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
-  
+    ampK: 0.25
+    saveAngle: 60.0
+
+  task:
+    maxVelDes: 8.0 
+    minVelDes: 3.0
+    maxPosDesZ: 0.1 
+    minPosDesZ: 0.4
+    maxPosDesX: 0.4 
+    minPosDesX: 0.8
+    minMassTip: 0.0
+    maxMassTip: 0.03
+
   control:
     # damping: [0.006981317]           # [N*m*s/rad] # no use 
     # stiffness: [0.8674531575294935]  # [N*m/rad]   # no use
