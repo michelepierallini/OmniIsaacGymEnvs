@@ -89,7 +89,6 @@ class FishingRodTaskPosDueCV(RLTask):
         self._vel_or_scale = self._task_cfg["env"]["learn"]["velOriTipScale"]
         self._pos_scale = self._task_cfg["env"]["learn"]["positionTipScale"]
         self._or_scale = self._task_cfg["env"]["learn"]["orientationTipScale"]
-        
         self._task_cfg["sim"]["add_ground_plane"] = True
     
         ## initial config 
@@ -104,7 +103,6 @@ class FishingRodTaskPosDueCV(RLTask):
         self._max_episode_length_s = self._task_cfg["env"]["episodeLength"] 
         self._init_state = self._task_cfg["env"]["initState"]["q"]
         self.noise_level = self._task_cfg["env"]["learn"]["noiseLevel"]
-        
         self._acc_scale = self._task_cfg["env"]["learn"]["accLinTipScale"]
         self._acc_noise = self._task_cfg["env"]["learn"]["accLinTipNoise"]
                 
@@ -294,7 +292,6 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self.tip_acc_lin = (self.tip_vel_lin[:, 0] - self.tip_vel_lin_old[:, 0]) / self._dt
         
-        ## FishingRodPos_X_000_pos_new_2_vel
         self.obs_buf[:, 0] = self.actions[:, 0] 
         self.obs_buf[:, 1] = self.dof_vel[:, 0] / self._q_dot_scale
         
@@ -407,8 +404,6 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self._vel_lin_des[env_ids] =  ( ( self.max_vel_lin_des + self.min_vel_lin_des) / 2 ) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
 
-            
-        ## I am not initizializing these, which is bad but I don't care 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
         self.actions_save = self.actions
@@ -440,9 +435,7 @@ class FishingRodTaskPosDueCV(RLTask):
             self.extras["episode"]['rew_' + key] = torch.mean(self.episode_sums[key][env_ids]) / self._max_episode_length_s
             self.episode_sums[key][env_ids] = 0.0  
             
-            
     def post_reset(self):
-        
         self._num_dof = self._n_joints
         self.dof_pos = torch.zeros((self._num_envs, self._num_dof), dtype=torch.float, device=self._device)
         self.dof_vel = torch.zeros((self._num_envs, self._num_dof), dtype=torch.float, device=self._device)
@@ -451,6 +444,10 @@ class FishingRodTaskPosDueCV(RLTask):
         self.tip_or = torch.zeros((self._num_envs, 4), dtype=torch.float, device=self._device, requires_grad=False)
         self.tip_vel_lin = torch.zeros((self._num_envs, 3), dtype=torch.float, device=self._device, requires_grad=False)
         self.tip_vel_or = torch.zeros((self._num_envs, 4), dtype=torch.float, device=self._device, requires_grad=False)
+        self.tip_pos_old = torch.zeros((self._num_envs, 3), dtype=torch.float, device=self._device, requires_grad=False)
+        self.tip_vel_lin_old = torch.zeros((self._num_envs, 3), dtype=torch.float, device=self._device, requires_grad=False)
+        self.tip_acc_lin_old = torch.zeros(self._num_envs, dtype=torch.float, device=self._device, requires_grad=False)
+        
         # self._pos_des = torch.zeros(self._num_envs, dtype=torch.float, device=self._device, requires_grad=False)
         # self._vel_lin_des = torch.zeros(self._num_envs, dtype=torch.float, device=self._device, requires_grad=False)
 

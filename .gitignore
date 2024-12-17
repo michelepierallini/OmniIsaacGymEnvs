@@ -74,3 +74,4 @@ omniisaacgymenvs/cfg/task/FishingRodPos.yaml
 omniisaacgymenvs/cfg/train/FishingRodPosPPO.yaml
 omniisaacgymenvs/FishingRodPos_X_000_pos_new_2_vel/
 omniisaacgymenvs/FishingRodPos_X_001_pos_new_2_vel/
+my_push.sh

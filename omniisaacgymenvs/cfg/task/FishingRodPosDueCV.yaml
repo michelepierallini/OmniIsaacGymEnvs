@@ -21,8 +21,6 @@ env:
   numObservations: 11 # added acc tip
   numActions: 1
   switchCV: 300
-  # targetPosDes: 2.8 # [m] X component 
-  # targetVelDes: 5.0 # [m/s] X component 
 
   initState:
     q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
