@@ -142,7 +142,7 @@ class FishingRodTaskPosDueCV(RLTask):
                             "joint_acc": torch_zeros(), "joint_vel": torch_zeros(), "joint_pos": torch_zeros()}
         
         ## desired task 
-        self.min_vel_lin_des, self.max_vel_lin_des = self._task_cfg["env"]["task"]["minVelDes"], self._task_cfg["env"]["task"]["maxVelDes"]   # [m/s] only one component
+        self.min_vel_lin_des, self.max_vel_lin_des = self._task_cfg["env"]["task"]["minVelDes"], self._task_cfg["env"]["task"]["maxVelDes"] # [m/s] only one component
         self._min_mass_tip, self._max_mass_tip = self._task_cfg["env"]["task"]["minMassTip"], self._task_cfg["env"]["task"]["maxMassTip"] # [Kg]
         self.new_mass = self._min_mass_tip + (self._max_mass_tip - self._min_mass_tip) * torch.rand(self._num_envs, device=self._device)
         if self.tracking_Z_bool:
@@ -287,10 +287,7 @@ class FishingRodTaskPosDueCV(RLTask):
         
         self.refresh_dof_state_tensors()
         
-        if self.tracking_Z_bool:
-            self.tip_acc_lin = (self.tip_vel_lin[:, -1] - self.tip_vel_lin_old[:, -1]) / self._dt
-        else:
-            self.tip_acc_lin = (self.tip_vel_lin[:, 0] - self.tip_vel_lin_old[:, 0]) / self._dt
+        self.tip_acc_lin = (self.tip_vel_lin[:, 0] - self.tip_vel_lin_old[:, 0]) / self._dt
         
         self.obs_buf[:, 0] = self.actions[:, 0] 
         self.obs_buf[:, 1] = self.dof_vel[:, 0] / self._q_dot_scale
@@ -334,7 +331,7 @@ class FishingRodTaskPosDueCV(RLTask):
                     help_term = self.generate_trajectory(self.progress_buf[0] * self._dt) * torch.ones(self._num_envs, dtype=torch.float, device=self._device)
                 else:
                     pass
-                            
+            
                 ## setting the position of the motor and the torque     
                 torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) \
                         - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
@@ -399,10 +396,10 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self._pos_des[env_ids] = (self.max_pos_des - self.min_pos_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_pos_des
         
-        if self.epoch_num > self._when_to_switch:
+        if self.epoch_num > self._when_to_switch or self._cfg["test"]:
             self._vel_lin_des[env_ids] = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
         else:
-            self._vel_lin_des[env_ids] =  ( ( self.max_vel_lin_des + self.min_vel_lin_des) / 2 ) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
+            self._vel_lin_des[env_ids] =  ( ( self.max_vel_lin_des + self.min_vel_lin_des) / 2  - 1.0) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel

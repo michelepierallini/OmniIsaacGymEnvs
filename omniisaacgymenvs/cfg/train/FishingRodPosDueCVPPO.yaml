@@ -22,7 +22,8 @@ params:
         fixed_sigma: True
 
     mlp:
-      units: [512, 256, 128]  
+      # units: [512, 256, 128]  
+      units: [256, 128, 64]  
       activation: elu
       d2rl: False
       
@@ -61,8 +62,7 @@ params:
     save_best_after: 50
     save_frequency: 50
     grad_norm: 1.0
-    entropy_coef: 0.001 
-    # entropy_coef: 0.0 
+    entropy_coef: 0.0 # 0.001 
     truncate_grads: True
     e_clip: 0.2
     
@@ -74,8 +74,8 @@ params:
     horizon_length: 100     # -->  (dt 0.005) # 
     minibatch_size: 12800   # -->  (dt 0.005) #
 
-    mini_epochs: 5 #
-    critic_coef: 2 #
+    mini_epochs: 5 # 8
+    critic_coef: 2 # 4
 
     clip_value: True 
     seq_len: 4

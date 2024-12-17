@@ -20,7 +20,7 @@ env:
   whenToPrint: 20
   numObservations: 11 # added acc tip
   numActions: 1
-  switchCV: 300
+  switchCV: 500
 
   initState:
     q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
