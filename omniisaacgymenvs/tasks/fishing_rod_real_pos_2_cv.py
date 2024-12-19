@@ -43,6 +43,7 @@ class FishingRodTaskPosDueCV(RLTask):
         self._n_state = 2 * self._n_joints
         self._device = 'cuda:0'
         self._count = 0
+        self.PRINT_INT = 150
         self._num_observations = self._task_cfg["env"][ "numObservations"]
         self.tracking_Z_bool = tracking_Z
         self._num_actions = self._n_actuators
@@ -137,9 +138,11 @@ class FishingRodTaskPosDueCV(RLTask):
         self.episode_sums = {"err_pos": torch_zeros(), 
                              "torque": torch_zeros(), 
                              "err_vel": torch_zeros(),
-                            "action_rate": torch_zeros(), 
-                            "velocity_final": torch_zeros(), 
-                            "joint_acc": torch_zeros(), "joint_vel": torch_zeros(), "joint_pos": torch_zeros()}
+                             "action_rate": torch_zeros(), 
+                             "velocity_final": torch_zeros(), 
+                             "joint_acc": torch_zeros(), 
+                             "joint_vel": torch_zeros(), 
+                             "joint_pos": torch_zeros()}
         
         ## desired task 
         self.min_vel_lin_des, self.max_vel_lin_des = self._task_cfg["env"]["task"]["minVelDes"], self._task_cfg["env"]["task"]["maxVelDes"] # [m/s] only one component
@@ -157,14 +160,14 @@ class FishingRodTaskPosDueCV(RLTask):
         self.des_y_coordinate = torch.sqrt(self._length_fishing_rod**2 - self._pos_des**2)
         
         print('\n')
-        print('=======================================================================================================')
+        print('=' * self.PRINT_INT)
         if self.min_pos_des != self.max_pos_des:
             print('[INFO]: Desired Positions is changing any epoch')
             if ~self.tracking_Z_bool:
                 print('[INFO]: The point is simmetric w.r.t. the fishing rod')
         if self.min_vel_lin_des != self.max_vel_lin_des:
             print(f'[INFO]: Desired Velocity is changing any epoch after {self._when_to_switch} epochs')
-        print('=======================================================================================================')
+        print('=' * self.PRINT_INT)
         print('\n\n')
         return
             
@@ -198,9 +201,9 @@ class FishingRodTaskPosDueCV(RLTask):
         self.get_fishingrod()
         super().set_up_scene(scene)
         self._fishingrods = FishingRodView(prim_paths_expr="/World/envs/.*/fishingrod", 
-                                            name="FishingRodView", 
-                                            default_dof_pos = self.q_init,
-                                            track_contact_forces=False) 
+                                        name="FishingRodView", 
+                                        default_dof_pos = self.q_init,
+                                        track_contact_forces=False) 
         scene.add(self._fishingrods)
         scene.add(self._fishingrods._tip)
         scene.add(self._fishingrods._base)
@@ -232,7 +235,8 @@ class FishingRodTaskPosDueCV(RLTask):
                                                     get_prim_at_path(fishingrod.prim_path),
                                                     self._sim_config.parse_actor_config("FishingRod"))
         if self.WANNA_INFO and self._cfg["test"] and self._cfg["livestream"]:
-            print('\n=======================================================================================================')
+            print('\n')
+            print('=' * self.PRINT_INT)
             print(dir(fishingrod))
             input('HHHHHHalmaaaaaa')
             
@@ -240,19 +244,22 @@ class FishingRodTaskPosDueCV(RLTask):
         self._name_joint = ['fishing_actuator_joint'] + [f'Joint_{i}' for i in range(1, self._n_joints)]
        
     def refresh_dof_state_tensors(self):
+        
         self.dof_pos = self._fishingrods.get_joint_positions(clone=False)
         self.dof_vel = self._fishingrods.get_joint_velocities(clone=False)
         # self.tip_pos, self.tip_or = self._fishingrods._tip.get_local_poses() ## very slow :( 
         self.tip_pos, self.tip_or = self._fishingrods._tip.get_world_poses()
-        
+        self.base_pos, self.base_or = self._fishingrods._base.get_world_poses()
+
         if self.tracking_Z_bool:
             pass 
         else:
             self.tip_pos[:, 0] = self.tip_pos[:, 0] - self._env_pos[:, 0]
-        
-        self.base_pos, self.base_or = self._fishingrods._base.get_world_poses()
+            # self.tip_pos[:, 0] = self.tip_pos[:, 0] - self.base_pos[:, 0]
+    
         self.tip_vel_or = self._fishingrods._tip.get_angular_velocities(clone=False)
-        self.tip_vel_lin = self._fishingrods._tip.get_linear_velocities(clone=False)  
+        # self.tip_vel_lin = self._fishingrods._tip.get_linear_velocities(clone=False)  
+        self.tip_vel_lin = self.tip_pos - self.tip_pos_old / self._dt
         
         if self._cfg["test"] or self._cfg["livestream"]:
             for i in range(0, self._num_envs):
@@ -266,7 +273,7 @@ class FishingRodTaskPosDueCV(RLTask):
         if self.WANNA_INFO and self._count%self._when_to_print == 0:
             if (self.progress_buf * self._dt == self._max_episode_length_s).all() and self.WANNA_INFO and ~self._cfg["test"]:
                 print('[INFO] Stop episode ...')
-                input('=======================================================================================================')
+                input('=' * self.PRINT_INT)
             if self.tracking_Z_bool:
                 print('[INFO] Pos Z   : ', self.tip_pos[:,-1].flatten())
             else:
@@ -277,16 +284,18 @@ class FishingRodTaskPosDueCV(RLTask):
             print('[INFO] Action  : ', self.torques_to_print.flatten())
             print('[INFO] Torque  : ', (self._action_scale * self.actions[:, 0]).flatten())
             print('[INFO] Time    : ', self._count * self._dt)
-            print('=======================================================================================================')
+            print('=' * self.PRINT_INT)
     
     def get_observations(self) -> dict:  
-         
-        self.tip_vel_lin_old = self.tip_vel_lin
-        self.tip_pos_old = self.tip_pos
-        self.tip_acc_lin_old = self.tip_acc_lin
-        
-        self.refresh_dof_state_tensors()
-        
+            
+        # self.refresh_dof_state_tensors()
+        if self.WANNA_INFO:
+            print(f"[INFO] tip pos     : {self.tip_pos[:3, 0]}")
+            print(f"[INFO] tip pos old : {self.tip_pos_old[:3, 0]}")
+            print('\n')
+            print(f'[INFO] vel tip     : {(self.tip_pos[:3, 0] - self.tip_pos_old[:3, 0] / self._dt)}')
+            print(f'[INFO] vel isaac   : {(self.tip_vel_lin[:3, 0])}')
+            print('-' * 50)
         self.tip_acc_lin = (self.tip_vel_lin[:, 0] - self.tip_vel_lin_old[:, 0]) / self._dt
         
         self.obs_buf[:, 0] = self.actions[:, 0] 
@@ -352,12 +361,16 @@ class FishingRodTaskPosDueCV(RLTask):
                     print('[INFO] stiffness_torque    : ', stiffness_torque.flatten())
                     print('[INFO] damping_torque      : ', damping_torque.flatten())
                     print('[INFO] torque              : ', self.torques.flatten())
-                    input('=======================================================================================================')
+                    input('=' * self.PRINT_INT)
                 
                 for _ in range(self.control_frequency_inv_real):
                     self._env._world.step(render=self._env._render)
                     self._env.sim_frame_count += 1
                     # SimulationContext.step(self._env._world, render=False)
+                    
+                self.tip_vel_lin_old = self.tip_vel_lin.clone()
+                self.tip_pos_old = self.tip_pos.clone()
+                self.tip_acc_lin_old = self.tip_acc_lin.clone()
                 self.refresh_dof_state_tensors()
         
     def get_target(self):
@@ -397,6 +410,7 @@ class FishingRodTaskPosDueCV(RLTask):
             self._pos_des[env_ids] = (self.max_pos_des - self.min_pos_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_pos_des
         
         if self.epoch_num > self._when_to_switch or self._cfg["test"]:
+            ## curriculum learning
             self._vel_lin_des[env_ids] = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
         else:
             self._vel_lin_des[env_ids] =  ( ( self.max_vel_lin_des + self.min_vel_lin_des) / 2  - 1.0) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
@@ -415,7 +429,7 @@ class FishingRodTaskPosDueCV(RLTask):
         self._fishingrods.set_joint_velocities(self.dof_vel, indices=indices)
         
         self._env._world.step(render=self._env._render)
-        self.refresh_dof_state_tensors()
+        self.refresh_dof_state_tensors() # check this one
         if self.WANNA_MASS_CHANGE:
             self.update_tip_mass_all()
         
@@ -516,10 +530,11 @@ class FishingRodTaskPosDueCV(RLTask):
             self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
 
             if self._cfg['test']:
-                print('\n=======================================================================================================')
+                print('\n')
+                print('=' * self.PRINT_INT)
                 if self.print_one:
                     print('[INFO] I will just verify at the last instant the condition of the tip')
-                    print('=======================================================================================================')
+                    print('=' * self.PRINT_INT)
                     self.print_one = False
                 if self.tracking_Z_bool:
                     print('[INFO] Pos Tip :  ', ((self.tip_pos[:,-1]).flatten()))
@@ -527,15 +542,15 @@ class FishingRodTaskPosDueCV(RLTask):
                     print('[INFO] Pos Tip :  ', torch.abs((self.tip_pos[:,0]).flatten()))
                 
                 print('[INFO] Pos Des :  ', ((self._pos_des).flatten()))
-                print('=======================================================================================================')
+                print('=' * self.PRINT_INT)
                 print('[INFO] Vel Tip :  ', (module_vel.flatten()))
                 print('[INFO] Vel Des :  ', (self._vel_lin_des.flatten()))
-                print('=======================================================================================================')
+                print('=' * self.PRINT_INT)
                 print('[INFO] Err Pos :  ', (err_reached_pos.flatten()))
                 print('[INFO] Err Vel :  ', (err_reached_vel.flatten()))
-                print('=======================================================================================================')
+                print('=' * self.PRINT_INT)
                 input('[INFO] check ...')
-                print('=======================================================================================================')
+                print('=' * self.PRINT_INT)
                 self.my_callback_testing_each_env(self.filename_2save)
                 self.epoch_num_save += 1
                 if self._count % 10 == 0 and self.WANNA_INFO and self._cfg["test"]:
@@ -611,7 +626,7 @@ class FishingRodTaskPosDueCV(RLTask):
                     csvwriter.writerow(tensor.to('cpu').detach().numpy().ravel()) # 1D array
                     
         print('[INFO] Plotting and Saving ...')
-        print('=======================================================================================================')
+        print('=' * self.PRINT_INT)
                     
     def my_plot_rn(self, pos_tip, vel_tip, actions, epoch, path):
         from matplotlib import pyplot as plt
