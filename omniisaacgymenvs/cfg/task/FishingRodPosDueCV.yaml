@@ -9,7 +9,8 @@ env:
   envSpacing: 3.0 
   resetDist: 3.0  
   maxEffort: 20.0
-  clipObservations: 50.0 
+  clipObservations: 50.0 # FishingRodPos_X_002_pos_new_2_vel_cv
+  # clipObservations: 100.0 # FishingRodPos_X_003_pos_new_2_vel_cv
   clipActions: 20.0 # [Nm] EM-Act
   controlFrequencyInv: 0 # 100 Hz, 2 60 Hz ## control decimation, i.e., how many simulator steps between RL actions
   # controlFrequencyInvReal: 2 # 002 when setting torques this is mandatory
@@ -18,19 +19,24 @@ env:
   lengthFishingRod: 2.9417 # [m]
   lengthFishingY: 0.0700   # [m]
   whenToPrint: 20
-  numObservations: 11 # added acc tip
+  numObservations: 11 # added acc tip ## up to FishingRodPos_X_002_pos_new_2_vel_cv
+  # numObservations: 12 ## not using, added old action but this is not working.
   numActions: 1
-  switchCV: 500
+  switchCV: 1 # 500
+  printInt: 150
 
   initState:
     q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
     qDot: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] 
-    ampK: 0.25
+    ampK: 0.25 # FishingRodPos_X_002_pos_new_2_vel_cv
+    # ampK: 1.0 # FishingRodPos_X_003_pos_new_2_vel_cv
     saveAngle: 60.0
 
   task:
-    maxVelDes: 8.0 
-    minVelDes: 3.0
+    # maxVelDes: 8.0 
+    # minVelDes: 3.0
+    maxVelDes: 50.0 
+    minVelDes: 5.0
     maxPosDesZ: 0.1 
     minPosDesZ: 0.4
     maxPosDesX: 0.4 
@@ -41,15 +47,12 @@ env:
   control:
     # damping: [0.006981317]           # [N*m*s/rad] # no use 
     # stiffness: [0.8674531575294935]  # [N*m/rad]   # no use
-    
     stiffness: [1.23]                # [N*m/rad]   # --> FishingRodPos_X_000_pos_new_2_vel
     damping: [0.08674531575294935]   # [N*m*s/rad] # --> FishingRodPos_X_000_pos_new_2_vel
-
     decimation: 2                      # Number of control action updates @ sim DT per policy DT
     # actionScale: 3.141592653589793   # [rad] 
     actionScale: 1.0471975511965976    # 60 degrees
     # actionScale: 1.5707963267948966  # 90 degrees
-    
   
   learn:
     # qScale: 3.141592653589793   # [rad]
@@ -63,11 +66,11 @@ env:
     qNoise: 0.01
     qDotNoise: 0.01
     qDDotNoise: 0.1
-    velLinTipNoise: 0.1
+    velLinTipNoise: 1.0
     accLinTipNoise: 1.0
     posTipNoise: 0.01
-    velLinTipScale: 50.0       # [m/s]
-    accLinTipScale: 500.0      # [m/s^2]
+    velLinTipScale: 100.0      # [m/s]
+    accLinTipScale: 200.0      # [m/s^2]
     velOriTipScale: 10.0       # [deg/s]
     positionTipScale: 3.0      # [m]
     orientationTipScale: 360.0 # [deg]
