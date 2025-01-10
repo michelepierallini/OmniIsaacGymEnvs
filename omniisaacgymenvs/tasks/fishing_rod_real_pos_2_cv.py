@@ -544,13 +544,13 @@ class FishingRodTaskPosDueCV(RLTask):
             self.episode_sums["joint_pos"] = self.dof_pos[:] 
 
             ## classic
-            # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
+            self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
             
-            # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s + torch.where(module_vel < 0, -5, 5)
-            self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
-                                + torch.where(module_vel < 0, -0.5 / (1 + err_reached_vel ** 2), 0.5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
+            # ## FishingRodPos_X_003_pos_new_2 -- just this one like this
+            # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
+            #                     + torch.where(module_vel < 0, -0.5 / (1 + err_reached_vel ** 2), 0.5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
             
-            ## velocity reward
+            ## velocity reward -- NEVER USED YET (need touning on the paramenter)
             # self.rew_buf[:] += ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
 
             if self._cfg['test']:
