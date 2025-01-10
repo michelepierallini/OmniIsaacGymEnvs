@@ -53,7 +53,8 @@ class FishingRodTaskPosDueCV(RLTask):
         amp = self._task_cfg["env"]["initState"]["ampK"] 
         k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        d_ii = amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
+        ## * 2 for FishingRodPos_X_004_pos_new_2
+        d_ii = 2 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
@@ -424,6 +425,8 @@ class FishingRodTaskPosDueCV(RLTask):
             self._vel_lin_des[env_ids] = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((num_resets,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
         else:
             self._vel_lin_des[env_ids] =  (( self.max_vel_lin_des + self.min_vel_lin_des) / 2) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
+        
+        self._vel_lin_des = -self._vel_lin_des ## FishingRodPos_X_004_pos_new_2
 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
@@ -545,7 +548,7 @@ class FishingRodTaskPosDueCV(RLTask):
             
             # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s + torch.where(module_vel < 0, -5, 5)
             self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
-                                + torch.where(module_vel < 0, -0.05 / (1 + err_reached_vel ** 2), 0.05 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
+                                + torch.where(module_vel < 0, -0.5 / (1 + err_reached_vel ** 2), 0.5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
             
             ## velocity reward
             # self.rew_buf[:] += ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
@@ -638,6 +641,7 @@ class FishingRodTaskPosDueCV(RLTask):
                     self.actions_save[i.item(),:], self.tip_pos_save[i.item(),:], \
                     self.tip_vel_save[i.item(),:], self._pos_des_save_3D[i.item(),:], \
                     self._vel_lin_des_save[i.item(),:]]
+            
             self.my_plot_rn(self.tip_pos_save[i.item(),:], self.tip_vel_save[i.item(),:], self.actions_save[i.item(),:], self.epoch_num_save, env_folder)
 
             for tensor, file_name in zip(tensors, file_names):
