@@ -51,10 +51,10 @@ class FishingRodTaskPosDueCV(RLTask):
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
         self.WANNA_MODEL_BASED_HELP = False
         amp = self._task_cfg["env"]["initState"]["ampK"] 
+        ## 1.2 * FishingRodPos_X_004_pos_new_2
         k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        ## * 2 for FishingRodPos_X_004_pos_new_2
-        d_ii = 2 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
+        d_ii = 1.2 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
@@ -426,7 +426,6 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self._vel_lin_des[env_ids] =  (( self.max_vel_lin_des + self.min_vel_lin_des) / 2) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
         
-        self._vel_lin_des = -self._vel_lin_des ## FishingRodPos_X_004_pos_new_2
 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
