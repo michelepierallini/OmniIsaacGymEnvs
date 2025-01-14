@@ -22,7 +22,7 @@ env:
   numObservations: 11 # added acc tip ## up to FishingRodPos_X_002_pos_new_2_vel_cv
   # numObservations: 12 ## not using, added old action but this is not working.
   numActions: 1
-  switchCV: 0 # 500
+  switchCV: 500 # 0
   printInt: 150
 
   initState:

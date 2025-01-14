@@ -155,6 +155,7 @@ class FishingRodTaskPosDueCV(RLTask):
             self._pos_des = torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
         
         self._vel_lin_des = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
+        # self._vel_lin_des = -self._vel_lin_des
         self.des_y_coordinate = torch.sqrt(self._length_fishing_rod**2 - self._pos_des**2)
         
         print('\n')
@@ -426,6 +427,7 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self._vel_lin_des[env_ids] =  (( self.max_vel_lin_des + self.min_vel_lin_des) / 2) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
         
+        # self._vel_lin_des[env_ids] = -self._vel_lin_des[env_ids]
 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
@@ -543,14 +545,16 @@ class FishingRodTaskPosDueCV(RLTask):
             self.episode_sums["joint_pos"] = self.dof_pos[:] 
 
             ## classic
-            self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
+            # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
             
-            # ## FishingRodPos_X_003_pos_new_2 -- just this one like this
+            # ## FishingRodPos_X_004_pos_new_2 -- just this one like this
             # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
             #                     + torch.where(module_vel < 0, -0.5 / (1 + err_reached_vel ** 2), 0.5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
             
-            ## velocity reward -- NEVER USED YET (need touning on the paramenter)
-            # self.rew_buf[:] += ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
+            # ## FishingRodPos_X_005_pos_new_2 -- just this one like this
+            self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
+                                + torch.where(module_vel < 0, -5 / (1 + err_reached_vel ** 2), 5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
+            
 
             if self._cfg['test']:
                 print('\n')
