@@ -155,7 +155,7 @@ class FishingRodTaskPosDueCV(RLTask):
             self._pos_des = torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
         
         self._vel_lin_des = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
-        # self._vel_lin_des = -self._vel_lin_des
+        self._vel_lin_des = -self._vel_lin_des ## FishingRodPos_X_008_pos_new_2 and FishingRodPos_X_009_pos_new_2
         self.des_y_coordinate = torch.sqrt(self._length_fishing_rod**2 - self._pos_des**2)
         
         print('\n')
@@ -254,12 +254,14 @@ class FishingRodTaskPosDueCV(RLTask):
         # self.tip_pos, self.tip_or = self._fishingrods._tip.get_local_poses() ## very slow :( 
         self.tip_pos, self.tip_or = self._fishingrods._tip.get_world_poses()
         self.base_pos, self.base_or = self._fishingrods._base.get_world_poses()
+        self.base_vel_init = self._fishingrods._base.get_linear_velocities(clone=False)
 
         if self.tracking_Z_bool:
             pass 
         else:
             self.tip_pos[:, 0] = self.tip_pos[:, 0] - self._env_pos[:, 0]
             # self.tip_pos[:, 0] = self.tip_pos[:, 0] - self.base_pos[:, 0]
+            self.tip_vel_lin[:, 0] = self.tip_vel_lin[:, 0] - self.base_vel_init[:, 0] 
     
         self.tip_vel_or = self._fishingrods._tip.get_angular_velocities(clone=False)
         
@@ -427,7 +429,7 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self._vel_lin_des[env_ids] =  (( self.max_vel_lin_des + self.min_vel_lin_des) / 2) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
         
-        # self._vel_lin_des[env_ids] = -self._vel_lin_des[env_ids]
+        self._vel_lin_des[env_ids] = -self._vel_lin_des[env_ids] ## FishingRodPos_X_008_pos_new_2 & FishingRodPos_X_009_pos_new_2
 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
@@ -551,11 +553,10 @@ class FishingRodTaskPosDueCV(RLTask):
             # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
             #                     + torch.where(module_vel < 0, -0.5 / (1 + err_reached_vel ** 2), 0.5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
             
-            # ## FishingRodPos_X_005_pos_new_2 -- just this one like this
-            self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
-                                + torch.where(module_vel < 0, -5 / (1 + err_reached_vel ** 2), 5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
-            
-
+            # ## FishingRodPos_X_008_pos_new_2 & FishingRodPos_X_009_pos_new_2
+            self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 2 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
+                                + torch.where(module_vel < 0, 5 / (1 + err_reached_vel ** 2), -5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
+                                            
             if self._cfg['test']:
                 print('\n')
                 print('=' * self.PRINT_INT)
@@ -581,8 +582,7 @@ class FishingRodTaskPosDueCV(RLTask):
                 self.my_callback_testing_each_env(self.filename_2save)
                 self.epoch_num_save += 1
                 if self._count % 10 == 0 and self.WANNA_INFO and self._cfg["test"]:
-                    input('Check prints ...')
-                    
+                    input('Check prints ...')   
         else:
             pass
         
