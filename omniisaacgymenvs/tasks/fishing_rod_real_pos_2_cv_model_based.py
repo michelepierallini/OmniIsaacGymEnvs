@@ -3,23 +3,25 @@ from omniisaacgymenvs.robots.articulations.fishingrobot import FishingRod
 from omniisaacgymenvs.robots.articulations.views.fishingrod_view import FishingRodView
 from omni.isaac.core.utils.prims import get_prim_at_path
 from omni.isaac.core.utils.stage import get_current_stage
-# from omni.isaac.core.simulation_context import SimulationContext 
 from omni.isaac.core.objects import DynamicSphere
 from pxr import UsdPhysics
-# from omni.physx import PhysxSceneDesc, PhysxSceneFlag, PhysxScene
-# from omniisaacgymenvs.tasks.utils.usd_utils import set_drive
 import torch
+from .fishing_rod_lumped_param.try_planner_fishing_3_casadi import *
+import numpy as np 
 
 ####################################################################################################################################
-## THIS IS THE BEST ONE WHICH WORKS. FishingRodPos_X_008_pos_new_2 and FishingRodPos_X_009_pos_new_2_Kpiu
-## NOTE 2 that this code actually does not implement a CV-learning ["env"]["switchCV"] = 0 
-## Implemnting cv:
-## i) fixing velocity and setting position
-## ii) fixing position and setting velocity
-## 6. Add model-based DDP initial guess 
+### To run this code
+## decomment what it is needed in task_util.py, i.e.,
+## from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv_model_based import FishingRodTaskPosDueCVModelBased
+## "FishingRodPosDueCVMB" : FishingRodTaskPosDueCVModelBased
+####################################################################################################################################
+## ISAAC_PYTHON -m venv tolopesca3 --system-site-package
+## source tolopesca3/bin/activate
+## source pyenvs.sh
+## (tolopesca3) michele@michele-Dell-G16-7630:~/Documents/OmniIsaacGymEnvs/omniisaacgymenvs$ python scripts/rlgames_train.py task=FishingRodPosDueCVMB num_envs=2 experiment=FishingRodPos_X_009_pos_new_2_Kpiu_MB headless=True
 ####################################################################################################################################
 
-class FishingRodTaskPosDueCV(RLTask):
+class FishingRodTaskPosDueCVModelBased(RLTask):
     def __init__(
         self,
         name,
@@ -44,28 +46,18 @@ class FishingRodTaskPosDueCV(RLTask):
         self.epoch_num = 0
         self.epoch_num_save = 0
         self.PRINT_INT = self._task_cfg["env"]["printInt"]
-        self._num_observations = self._task_cfg["env"][ "numObservations"]
+        self._num_observations = self._task_cfg["env"]["numObservations"]
         self.tracking_Z_bool = tracking_Z
         self._num_actions = self._n_actuators
         self._num_envs = self._task_cfg["env"]["numEnvs"]
         self._env_spacing = self._task_cfg["env"]["envSpacing"] 
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
-        self.WANNA_MODEL_BASED_HELP = False
+        self.WANNA_MODEL_BASED_HELP_DUMMY = False
         amp = self._task_cfg["env"]["initState"]["ampK"] 
-        
-        ## FishingRodPos_X_008_pos_new_2 OK
-        # k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
-        #                 12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        # d_ii = 1.2 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
-        #                 0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
-        
-        # FishingRodPos_X_009_pos_new_2_Kpiu
         k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
         d_ii = 1.6 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
-
-        
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
         self.D_matrix = torch.diag(d_ii) + torch.diag(d_ii[:-1] / 2e1, diagonal=-1) + torch.diag(d_ii[:-1] / 2e1, diagonal=1) + torch.diag(d_ii[:-2] / 5e1, diagonal=-2) + torch.diag(d_ii[:-2] / 5e1, diagonal=2)
@@ -165,9 +157,30 @@ class FishingRodTaskPosDueCV(RLTask):
             self._pos_des = torch.clamp((self.max_pos_des - self.min_pos_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_pos_des, self.min_pos_des, self.max_pos_des)
         
         self._vel_lin_des = (self.max_vel_lin_des - self.min_vel_lin_des) * torch.rand((self._num_envs,), dtype=torch.float, device=self._device) + self.min_vel_lin_des
-        self._vel_lin_des = -self._vel_lin_des ## FishingRodPos_X_008_pos_new_2 and FishingRodPos_X_009_pos_new_2
+        self._vel_lin_des = -self._vel_lin_des
         self.des_y_coordinate = torch.sqrt(self._length_fishing_rod**2 - self._pos_des**2)
         
+        pos_des_np_mean = torch.mean(self._pos_des).cpu().numpy() 
+        vel_lin_des_np_mean = torch.mean(self._vel_lin_des).cpu().numpy() 
+        des_y_coordinate_np_mean = torch.mean(self.des_y_coordinate).cpu().numpy()
+        
+        if self.tracking_Z_bool:
+            ## pos_d = [Z, X]
+            pos_d = np.array([des_y_coordinate_np_mean, pos_des_np_mean])
+        else:
+            pos_d = np.array([pos_des_np_mean, des_y_coordinate_np_mean])
+        vel_d = -vel_lin_des_np_mean
+        
+        self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
+                                                    pos_d=pos_d, 
+                                                    _max_episode_length_s=self._max_episode_length_s,
+                                                    vel_des=vel_d)
+        # self.u_model_based = main_fun_optmial_casadi()
+        
+        # self.u_model_based = -np.array(self.u_model_based)
+        self.u_model_based = np.array(self.u_model_based) # (_n_envs, time)
+        self.u_model_based_torch = torch.tensor(self.u_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(self._num_envs, 1)
+                      
         print('\n')
         print('=' * self.PRINT_INT)
         if self.min_pos_des != self.max_pos_des:
@@ -299,8 +312,8 @@ class FishingRodTaskPosDueCV(RLTask):
             print('[INFO] Time    : ', self._count * self._dt)
             print('=' * self.PRINT_INT)
     
-    def get_observations(self) -> dict:  
-            
+    def get_observations(self) -> dict: 
+                
         # self.refresh_dof_state_tensors()
         if self.WANNA_INFO:
             print(f"[INFO] tip pos     : {self.tip_pos[:3, 0]}")
@@ -333,11 +346,7 @@ class FishingRodTaskPosDueCV(RLTask):
         self.obs_buf[:, 8] = self.tip_acc_lin[:] / self._acc_scale
         self.obs_buf[:, 9] = self.tip_acc_lin_old[:] / self._acc_scale
         
-        ## up to FishingRodPos_X_002_pos_new_2_vel numObservation = 11
-        # self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
-        
-        ## FishingRodPos_X_003_pos_new_2_vel numObservation = 12, what follows  TOBETESTED
-        # self.obs_buf[:, 10] = self.action_old[:, 0] /  self._action_scale
+        self.obs_buf[:, 10] = self.u_model_based_torch[:, self.progress_buf[0] - 1] / self._action_scale
         self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
         
         observations = {self._fishingrods.name: {"obs_buf": self.obs_buf}}
@@ -354,15 +363,13 @@ class FishingRodTaskPosDueCV(RLTask):
         for _ in range(self._decimation):  
             if self._env._world.is_playing():   
                 
-                if self.WANNA_MODEL_BASED_HELP:
+                if self.WANNA_MODEL_BASED_HELP_DUMMY:
                     help_term = self.generate_trajectory(self.progress_buf[0] * self._dt) * torch.ones(self._num_envs, dtype=torch.float, device=self._device)
                 else:
                     pass
-            
-                ## setting the position of the motor and the torque     
-                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) \
-                        - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
-            
+                
+                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) + self.u_model_based_torch[:, self.progress_buf[0] - 1] - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
+                
                 self.torques_to_print = torques
                 self.torques_all[:, 0] = torques
                 torques = self.torques_all
@@ -434,7 +441,7 @@ class FishingRodTaskPosDueCV(RLTask):
         else:
             self._vel_lin_des[env_ids] =  (( self.max_vel_lin_des + self.min_vel_lin_des) / 2) * torch.ones((num_resets,), dtype=torch.float, device=self._device) 
         
-        self._vel_lin_des[env_ids] = -self._vel_lin_des[env_ids] ## FishingRodPos_X_008_pos_new_2 & FishingRodPos_X_009_pos_new_2
+        self._vel_lin_des[env_ids] = -self._vel_lin_des[env_ids] 
 
         self.dof_pos_save = self.dof_pos
         self.dof_vel_save = self.dof_vel
@@ -550,15 +557,7 @@ class FishingRodTaskPosDueCV(RLTask):
             self.episode_sums["err_vel"] = err_reached_vel[:]
             self.episode_sums["velocity_final"] = self.tip_vel_lin[:]
             self.episode_sums["joint_pos"] = self.dof_pos[:] 
-
-            ## classic
-            # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s
             
-            # ## FishingRodPos_X_004_pos_new_2 -- just this one like this
-            # self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 1 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
-            #                     + torch.where(module_vel < 0, -0.5 / (1 + err_reached_vel ** 2), 0.5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
-            
-            # ## FishingRodPos_X_008_pos_new_2 & FishingRodPos_X_009_pos_new_2
             self.rew_buf[:] = ( 5 / (1 + err_reached_pos ** 2) + 2 / (1 + err_reached_vel ** 2) ) * self._max_episode_length_s \
                                 + torch.where(module_vel < 0, 5 / (1 + err_reached_vel ** 2), -5 / (1 + err_reached_vel ** 2)) * self._max_episode_length_s
                                             
