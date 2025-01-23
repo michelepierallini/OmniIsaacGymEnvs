@@ -44,13 +44,15 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.tasks.shadow_hand import ShadowHandTask
     from omniisaacgymenvs.tasks.crazyflie import CrazyflieTask
     from omniisaacgymenvs.tasks.solo_jump import SoloJumpTask
-    from omniisaacgymenvs.tasks.softleg_jump import SoftlegJumpTask
-    from omniisaacgymenvs.tasks.softleg_jump_tre import SoftlegJumpTaskTre
+    # from omniisaacgymenvs.tasks.softleg_jump import SoftlegJumpTask
+    # from omniisaacgymenvs.tasks.softleg_jump_tre import SoftlegJumpTaskTre
     # from omniisaacgymenvs.tasks.fishing_rod import FishingRodTask
-    from omniisaacgymenvs.tasks.fishing_rod_real import FishingRodTask
+    # from omniisaacgymenvs.tasks.fishing_rod_real import FishingRodTask
     # from omniisaacgymenvs.tasks.fishing_rod_real_pos import FishingRodTaskPos
     from omniisaacgymenvs.tasks.fishing_rod_real_pos_2 import FishingRodTaskPosDue
-    from omniisaacgymenvs.tasks.softleg_jump_quattro import SoftlegJumpTaskQuattro
+    from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv import FishingRodTaskPosDueCV
+    from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv_model_based import FishingRodTaskPosDueCVModelBased
+    # from omniisaacgymenvs.tasks.softleg_jump_quattro import SoftlegJumpTaskQuattro
     from omniisaacgymenvs.tasks.softleg_jump_cinque import SoftlegJumpTaskCinque
 
 
@@ -74,13 +76,15 @@ def initialize_task(config, env, init_sim=True):
         "ShadowHandOpenAI_FF": ShadowHandTask,
         "ShadowHandOpenAI_LSTM": ShadowHandTask,
         "SoloJump": SoloJumpTask,
-        "SoftlegJump": SoftlegJumpTask, 
-        "SoftlegJumpTre" : SoftlegJumpTaskTre,
-        "SoftlegJumpQuattro" : SoftlegJumpTaskQuattro,
+        # "SoftlegJump": SoftlegJumpTask, 
+        # "SoftlegJumpTre" : SoftlegJumpTaskTre,
+        # "SoftlegJumpQuattro" : SoftlegJumpTaskQuattro,
         "SoftlegJumpCinque" : SoftlegJumpTaskCinque,
-        "FishingRod" : FishingRodTask, 
+        # "FishingRod" : FishingRodTask, 
         # "FishingRodPos": FishingRodTaskPos
         "FishingRodPosDue" : FishingRodTaskPosDue,
+        "FishingRodPosDueCV" : FishingRodTaskPosDueCV,
+        "FishingRodPosDueCVMB" : FishingRodTaskPosDueCVModelBased
         }
 
     from .config_utils.sim_config import SimConfig

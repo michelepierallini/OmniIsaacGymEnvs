@@ -30,6 +30,12 @@ class ConstFishSiply:
     alph_pos_Y = 1e15
 
     
+    max_iter_ipopt = 1e4
+    u_bound = 10
+    ipopt_tol = 1e-4
+    linear_solver = 'ma27'
+    warn_initial_bounds = 1
+    
 
 def compute_dyn(x, action):
     ampli = ConstFishSiply.ampli
@@ -124,7 +130,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         vel_des = vel_des.cpu().numpy() if vel_des.is_cuda else vel_des.numpy()
     
     # Direct multiple shooting optimization
-    N_states = 24
+    N_states = ConstFishSiply.n * 2
     # N_joints = int(N_states / 2)
     N_controls = 1
     
@@ -136,14 +142,14 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     # Simulation time
     T = 1.0
     # Horizon length (number of optimization steps)
-    N = 200 # _max_episode_length_s
+    N = 200
     # Discretization step (time between two optimization steps)
     DT = T / N
     # Number of integrations between two steps
     n_int = 1
     # Integration step
     h = DT / n_int
-    u_lb, u_ub = -10, 10 
+    u_lb, u_ub = -ConstFishSiply.u_bound , ConstFishSiply.u_bound 
     x0 = [0.001] * N_states 
     u0 = [0.0] 
     pos_des = vertcat(pos_d) # desired position final   
@@ -263,11 +269,10 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     
     J = J + ConstFishSiply.alp_vel * (vel_k - vel_des)**2 + ConstFishSiply.alp_pos_X * (pos_k[0] - pos_des[0])**2 + ConstFishSiply.alp_pos_X * (pos_k[1] - pos_des[1])**2
     
-    ## Create an NLP solver
-    # linear_solver = 'ma27'
+    ## Create an NLP solver  
     prob = {'f': J, 'x': vertcat(*w), 'g': vertcat(*G)}
-    # opts = {'ipopt.max_iter': 1e4, 'warn_initial_bounds': 1,'ipopt.linear_solver': linear_solver, 'ipopt.hessian_approximation': 'limited-memory', 'ipopt.tol': 1e-1}
-    opts = {'ipopt.max_iter': 1e4, 'warn_initial_bounds': 1, 'ipopt.tol': 1e-4}
+    # opts = {'ipopt.max_iter': ConstFishSiply.max_iter_ipopt, 'warn_initial_bounds': ConstFishSiply.warn_initial_bounds,'ipopt.linear_solver': ConstFishSiply.linear_solver, 'ipopt.hessian_approximation': 'limited-memory', 'ipopt.tol': 1e-1}
+    opts = {'ipopt.max_iter': ConstFishSiply.max_iter_ipopt, 'warn_initial_bounds': ConstFishSiply.warn_initial_bounds, 'ipopt.tol': ConstFishSiply.ipopt_tol}
     solver = nlpsol('solver', 'ipopt', prob, opts) 
     sol = solver(x0=w_last, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
     

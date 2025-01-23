@@ -171,11 +171,11 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             pos_d = np.array([pos_des_np_mean, des_y_coordinate_np_mean])
         vel_d = -vel_lin_des_np_mean
         
-        self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
-                                                    pos_d=pos_d, 
-                                                    _max_episode_length_s=self._max_episode_length_s,
-                                                    vel_des=vel_d)
-        # self.u_model_based = main_fun_optmial_casadi()
+        # self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
+        #                                             pos_d=pos_d, 
+        #                                             _max_episode_length_s=self._max_episode_length_s,
+        #                                             vel_des=vel_d)
+        self.u_model_based = main_fun_optmial_casadi()
         
         # self.u_model_based = -np.array(self.u_model_based)
         self.u_model_based = np.array(self.u_model_based) # (_n_envs, time)
@@ -451,6 +451,8 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self._pos_des_save_3D = torch.zeros(num_resets, 3, dtype=torch.float, device=self._device)
         self._vel_lin_des_save = torch.zeros((num_resets, 0), dtype=torch.float, device=self._device)
         
+        self.torque_save = torch.zeros(num_resets, self._n_actuators, dtype=torch.float, device=self._device)
+        
         indices = env_ids.to(dtype=torch.int32)
          
         self._fishingrods.set_joint_positions(self.dof_pos, indices=indices)
@@ -549,7 +551,9 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             self.tip_pos_save = torch.cat([self.tip_pos_save, self.tip_pos], dim=1) 
             self.tip_vel_save = torch.cat([self.tip_vel_save, self.tip_vel_lin], dim=1) 
             self._pos_des_save_3D = torch.cat([self._pos_des_save_3D, self._ball_position], dim=1) 
-            self._vel_lin_des_save = torch.cat([self._vel_lin_des_save, self._vel_lin_des.unsqueeze(1)], dim=1)   
+            self._vel_lin_des_save = torch.cat([self._vel_lin_des_save, self._vel_lin_des.unsqueeze(1)], dim=1)  
+            self.torque_save = torch.cat([self.torque_save, self.torques_to_print], dim=1)
+            self.torque_save = torch.cat([self.torque_save, self.torques_to_print.unsqueeze(-1)], dim=1)            
                   
         if (self.progress_buf * self._dt >= self._max_episode_length_s).all():
             self.epoch_num += 1
@@ -635,7 +639,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             os.makedirs(epoch_folder)        
         
         file_names = ["dof_pos.csv", "dof_vel.csv", "actions.csv", "tip_pos.csv", 
-                    "tip_vel_save.csv", "pos_des_save_3D.csv", "vel_lin_des.csv"]
+                    "tip_vel_save.csv", "pos_des_save_3D.csv", "vel_lin_des.csv", 'torque.csv']
         
         env_ids = self.reset_buf.nonzero(as_tuple=True)[0]
         for i in env_ids:
@@ -647,9 +651,11 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             tensors = [self.dof_pos_save[i.item(),:], self.dof_vel_save[i.item(),:], \
                     self.actions_save[i.item(),:], self.tip_pos_save[i.item(),:], \
                     self.tip_vel_save[i.item(),:], self._pos_des_save_3D[i.item(),:], \
-                    self._vel_lin_des_save[i.item(),:]]
+                    self._vel_lin_des_save[i.item(),:], self.torque_save[i.item(),:]]
             
-            self.my_plot_rn(self.tip_pos_save[i.item(),:], self.tip_vel_save[i.item(),:], self.actions_save[i.item(),:], self.epoch_num_save, env_folder)
+            self.my_plot_rn(self.tip_pos_save[i.item(),:], self.tip_vel_save[i.item(),:], 
+                            self.actions_save[i.item(),:], self.torque_save[i.item(),:], 
+                            self.epoch_num_save, env_folder)
 
             for tensor, file_name in zip(tensors, file_names):
                 file_path = os.path.join(env_folder, file_name)
@@ -660,7 +666,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         print('[INFO] Plotting and Saving ...')
         print('=' * self.PRINT_INT)
                     
-    def my_plot_rn(self, pos_tip, vel_tip, actions, epoch, path):
+    def my_plot_rn(self, pos_tip, vel_tip, actions, torque, epoch, path):
         from matplotlib import pyplot as plt
         from matplotlib import rc
         import os 
@@ -680,7 +686,8 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         pos_tip = pos_tip.view(3, self.progress_buf[0] + 1).to(device)
         vel_tip = vel_tip.view(3, self.progress_buf[0] + 1).to(device)
         actions = actions.view(1, self.progress_buf[0] + 1).to(device)
-
+        torque = torque.view(1, self.progress_buf[0] + 1).to(device)
+        
         n, N = pos_tip.shape if pos_tip.ndim == 2 else (pos_tip.shape[0], 1)
         pos_tip = pos_tip.reshape((max(N, n), min(N, n)))
 
@@ -706,6 +713,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         pos_tip, vel_tip = pos_tip.cpu(), vel_tip.cpu()
         pos_des, vel_des = pos_des.cpu(), vel_des.cpu()
         timeTask, actions = timeTask.cpu(), actions.cpu()
+        torque = torque.cpu()
         
         if self.tracking_Z_bool:
             labelsPlot = 'Z'
@@ -750,4 +758,16 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         plt.tick_params(labelsize=font_size)
         plt.tight_layout()
         plt.savefig(name_folder + '/{}_{}_action.svg'.format(epoch, labelsPlot), format='svg')
+        plt.close()
+        
+        # Torque Plot
+        plt.figure(figsize=(size_1, size_2))
+        plt.plot(timeTask[0:(self.progress_buf[0] + 1)], torque[0, 0:(self.progress_buf[0] + 1)], linewidth=labelWidth, color='r', linestyle='solid', label='Policy')
+        plt.xlabel(r'$\mathbf{Time\,\, [s]}$', fontsize=font_size)
+        plt.ylabel(r'$\mathbf{Torque\,\, [Nm]}$', fontsize=font_size)
+        plt.legend(fontsize=font_size)
+        plt.grid()
+        plt.tick_params(labelsize=font_size)
+        plt.tight_layout()
+        plt.savefig(name_folder + '/{}_{}_torque.svg'.format(epoch, labelsPlot), format='svg')
         plt.close()
