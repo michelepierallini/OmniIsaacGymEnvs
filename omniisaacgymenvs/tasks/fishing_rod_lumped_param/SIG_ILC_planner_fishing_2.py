@@ -9,7 +9,7 @@ from fishing_rod_12_joints_np_casadi._p_tip_np import _p_tip
 from fishing_rod_12_joints_np_casadi._jacobian_diff_np import _jacobian_diff
 
 ########################################################################################################################
-## Model Equations Fishing Rod
+## Model Equations Fishing Rod Simplified Equations
 ########################################################################################################################
 
 def compute_dyn(x, action):
@@ -130,15 +130,7 @@ vel_err = get_vel_err(x)
 # Objective function term
 L = 0.5 * u**2  # control cost
 
-print(pos)
-# print(pos.shape)
-print('\n')
-# print(vel_err)
-# print(vel_err.shape)
-# # input()
-
 dynamics_fishing = Function('compute_dyn', [x, u], [x_dot, L])
-# dynamics_fishing = Function('compute_dyn', [x, u], [compute_dyn(x, u)])
 pos_fun = Function('get_pos_err', [x], [pos[0], pos[1]])
 vel_fun = Function('get_vel_err', [x], [vel_err])
 
@@ -226,7 +218,7 @@ for k in range(N):
     #print(f"\tAdding constraints {lbg} and {ubg} for step {k} \n")
     # final step
     if k == N-1:
-        #   Xk_target = Xk_end
+        # Xk_target = Xk_end
         L_links = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
         pos_k = _p_tip(Xk, L_links)
         print(f"pos_k: {pos_k} \n")

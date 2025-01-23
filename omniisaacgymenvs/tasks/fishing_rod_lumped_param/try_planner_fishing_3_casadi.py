@@ -1,7 +1,7 @@
 from casadi import *
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
+
 import torch 
 from scipy.interpolate import interp1d
 
@@ -16,16 +16,31 @@ from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np_ca
 ## I am using a simplified model with error. This is an initial guess
 ########################################################################################################################
 
-def compute_dyn(x, action):
+class ConstFishSiply:
+    n = 12 
     ampli = 1
     g = -9.81 * 0
-    m = 1 * vertcat(0.04, 0.04, 0.01, 0.008, 0.006, 0.005, 0.004, 0.004, 0.003, 0.0028, 0.0026, 0.0022)
+    m = ampli * vertcat(0.04, 0.04, 0.01, 0.008, 0.006, 0.005, 0.004, 0.004, 0.003, 0.0028, 0.0026, 0.0022)
     k = 1e0 * vertcat(0, 34.61, 17.20, 11.89, 12.61, 8.88, 3.65, 3.05, 6.4, 2.63, 3.02, 1.37)
     d = 5e-1 * vertcat(0.19, 0.16, 0.08, 0.06, 0.06, 0.04, 0.02, 0.15, 0.3, 0.1, 0.15, 0.06)
     L = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
+    
+    alp_vel = 0.25e1
+    alp_pos_X = 1e0
+    alph_pos_Y = 1e15
+
+    
+
+def compute_dyn(x, action):
+    ampli = ConstFishSiply.ampli
+    g = ConstFishSiply.g
+    m = ConstFishSiply.m
+    k = ConstFishSiply.k
+    d = ConstFishSiply.d
+    L = ConstFishSiply.L
     I_zz = 1 * m * L**2  
 
-    n = 12 # len(x) // 2
+    n = ConstFishSiply.n # len(x) // 2
     q = x[:n]
     q_dot = x[-n:]
     q = reshape(q, n, 1)
@@ -56,29 +71,39 @@ def compute_dyn(x, action):
         K[i, i + 1] = k2[i] / ampli  
     
     A = vertcat(1, DM.zeros(n-1, 1))
-    q_ddot = -mtimes(iM, MX(G) + mtimes(D, q_dot) + mtimes(K, q)) + mtimes(iM, A * action)    #  mtimes(C, q_dot)
+    q_ddot = -mtimes(iM, MX(G) + mtimes(D, q_dot) + mtimes(K, q)) + mtimes(iM, A * action)  #  mtimes(C, q_dot)
     
     x_dot = vertcat(q_dot, q_ddot)
     return x_dot
 
 def get_pos_err(x):
-    n = 12 # len(x) // 2
+    n = ConstFishSiply.n # len(x) // 2
     q = x[:n]
-    L = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
+    L = ConstFishSiply.L
     pos = _p_tip(q, L)
     pos = pos
     # print(f"pos: {pos} \n")
     return pos
 
 def get_vel_err(x):
-    n = 12 # len(x) // 2
+    n = ConstFishSiply.n # len(x) // 2
     q = x[:n]
     q_dot = x[-n:]
-    L = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1) 
+    L = ConstFishSiply.L 
     J = _jacobian_diff(q, L)
     J = J[0]
     vel = norm_2(mtimes(J, q_dot))
     return vel
+
+def get_vel_X(x):
+    n = ConstFishSiply.n # len(x) // 2
+    q = x[:n]
+    q_dot = x[-n:]
+    L = ConstFishSiply.L 
+    J = _jacobian_diff(q, L)
+    J = J[0]
+    vel = mtimes(J, q_dot)
+    return vel[0]
 
 ########################################################################################################################
 ## Starting with the Optmial Plannning anf Control Problem
@@ -88,7 +113,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
                             pos_d=[2.58, 0.15], 
                             _max_episode_length_s=100,
                             vel_des=10.0, 
-                            wanna_plot=False):
+                            wanna_plot=True):
     ''' pos_des [Z_coordinate, Y_coordinate] [m], vel_des Module of the velocity [m/s] '''
     print('\n\n')
     
@@ -98,10 +123,9 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     if isinstance(vel_des, torch.Tensor):
         vel_des = vel_des.cpu().numpy() if vel_des.is_cuda else vel_des.numpy()
     
-    
     # Direct multiple shooting optimization
     N_states = 24
-    N_joints = int(N_states / 2)
+    # N_joints = int(N_states / 2)
     N_controls = 1
     
     if tracking_Z_bool:
@@ -114,7 +138,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     # Horizon length (number of optimization steps)
     N = 200 # _max_episode_length_s
     # Discretization step (time between two optimization steps)
-    DT = T/N
+    DT = T / N
     # Number of integrations between two steps
     n_int = 1
     # Integration step
@@ -128,21 +152,22 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     x = MX.sym("x", N_states)              # states
 
     x_dot = compute_dyn(x, u)
-    pos = get_pos_err(x)
-    vel_err = get_vel_err(x)
+    # pos = get_pos_err(x)
+    # vel_err = get_vel_err(x)
 
     L = 0.5 * u ** 2  # control cost
 
     dynamics_fishing = Function('compute_dyn', [x, u], [x_dot, L])
-    pos_fun = Function('get_pos_err', [x], [pos[0], pos[1]])
-    vel_fun = Function('get_vel_err', [x], [vel_err])
+    # pos_fun = Function('get_pos_err', [x], [pos[0], pos[1]])
+    # vel_fun = Function('get_vel_err', [x], [vel_err])
+    # vel_X = get_vel_X(x)
 
     # Integrator Contact H-F Phase
     X0 = MX.sym('X0', N_states)
     U = MX.sym('U', N_controls)
     X = X0
     Q = 0
-    print('\tComputing Dynamic ... \n')
+    # print('\tComputing Dynamic ... \n')
     for j in range(n_int):
         k1, k1_q = dynamics_fishing(X, U)
         X = X + h * k1 ## stacking all my dynamics
@@ -150,14 +175,12 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     ## dynamic function to be integrated
     F_dynamics = Function('F_dynamics', [X0, U], [X, Q], ['x0', 'u0'], ['xf', 'qf'])
 
-    
     # Start with an empty NLP
-    w = []
-    w0 = []    # Initial guess
+    w, w0= [], [] # intial guess
     lbw, ubw = [], []
     J = 0
-    G = []
-    lbg, ubg = [], []
+    G = [] # constarint set 
+    lbg, ubg = [], [] # bound set 
 
     # "Lift" initial conditions
     Xk = MX.sym('X0', N_states)
@@ -174,8 +197,6 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     for k in range(N):
 
         x0_k = F_dynamics(x0=x0_k, u0=u0_k)  # return a DM type structure
-        pos_0 = pos_fun(x0)
-        vel_0 = vel_fun(x0)
         x0_k = x0_k['xf']
 
         x0t = np.transpose(x0_k.__array__())
@@ -208,51 +229,63 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         ubw += [inf] * N_states
         
         # Add continuity constraint
-        G += [Xk_end-Xk]
+        G += [Xk_end - Xk]
         lbg += [0.0] * N_states
         ubg += [0.0] * N_states
         
+        # # Velocities constraints
+        # vel_k = get_vel_X(Xk)
+        # G += [vel_k]
+        # lbg += [-inf] # velocity must be less than 0, so no lower bound (or -inf)
+        # ubg += [0.0]  
         
         #print(f"\tAdding constraints {lbg} and {ubg} for step {k} \n")
         # final step
         if k == N-1:
-            #   Xk_target = Xk_end
-            L_links = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
-            pos_k = _p_tip(Xk, L_links)
-            # print(f"pos_k: {pos_k} \n")
-            # vel_k = get_vel_err(Xk)
+            # Xk_target = Xk_end
+            pos_k = _p_tip(Xk, ConstFishSiply.L)
+            vel_k = get_vel_err(Xk)
+            
             # G += [pos_k[0] - pos_des[0]]
             # lbg += [-0.01]
             # ubg += [0.01]
-            
-            # print('pos_k : ', pos_k)
-            # print('pos_d : ', pos_des)
-            
-            G += [pos_k[n_tracking] - pos_d[n_tracking]]
+                        
+            G += [pos_k[n_tracking] - pos_d[n_tracking]]    
             lbg += [-0.001]
             ubg += [0.001]
             # G += [vel_k - vel_des]
             # lbg += [-5]
             # ubg += [5]
 
-    L_links = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
-    pos_k = _p_tip(Xk_end, L_links)
-    vel_k = get_vel_err(Xk_end)
+    pos_k = _p_tip(Xk_end, ConstFishSiply.L)
+    # vel_k = get_vel_err(Xk_end)
+    vel_k = get_vel_X(Xk_end)
     
-    J = J + 0.25e1 * (vel_k - vel_des)**2 + 1e0 * (pos_k[0] - pos_des[0])**2 + 1e15 * (pos_k[1] - pos_des[1])**2
+    J = J + ConstFishSiply.alp_vel * (vel_k - vel_des)**2 + ConstFishSiply.alp_pos_X * (pos_k[0] - pos_des[0])**2 + ConstFishSiply.alp_pos_X * (pos_k[1] - pos_des[1])**2
     
-    linear_solver = 'ma27'
-    # Create an NLP solver
+    ## Create an NLP solver
+    # linear_solver = 'ma27'
     prob = {'f': J, 'x': vertcat(*w), 'g': vertcat(*G)}
     # opts = {'ipopt.max_iter': 1e4, 'warn_initial_bounds': 1,'ipopt.linear_solver': linear_solver, 'ipopt.hessian_approximation': 'limited-memory', 'ipopt.tol': 1e-1}
-    opts = {'ipopt.max_iter': 1e4, 'warn_initial_bounds': 1, 'ipopt.tol': 1e-4}#,'ipopt.linear_solver': linear_solver, 'ipopt.tol': 1e-8}
+    opts = {'ipopt.max_iter': 1e4, 'warn_initial_bounds': 1, 'ipopt.tol': 1e-4}
     solver = nlpsol('solver', 'ipopt', prob, opts) 
     sol = solver(x0=w_last, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+    
     stats = solver.stats()
     w_opt = sol['x'].full().flatten()
     
     if stats['return_status'] == 'Solve_Succeeded':
         print("Optimization successful!")
+        
+        # q_opt, u1_opt = [], []
+        # for i in range(N):
+        #     start_index = i * (N_states + N_controls)
+        #     q_step_opt = w_opt[start_index : start_index + N_states] # Extract states for this time step
+        #     q_opt.append(q_step_opt) # Append the state vector for this time step
+        #     u1_opt += [w_opt[start_index + N_states]] # control is after states
+        # q_opt_array = np.array(q_opt)
+        # # qq1_opt1 = q_opt_array[:, 1]
+        
         # Optimal joint trajectories 
         q1_opt, q2_opt, q3_opt, q4_opt = [], [], [], []
         q5_opt, q6_opt, q7_opt, q8_opt = [], [], [], []
@@ -296,13 +329,24 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
             plt.xlabel('t')
             plt.grid()
             plt.legend(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12'])
-            plt.show()
+            plt.savefig('/home/michele/Desktop/q.png')
+            # plt.show()
+
+            plt.figure(2)
+            plt.clf()
+            plt.plot(tgrid, u1_opt, '-')
+            plt.ylabel('u')
+            plt.xlabel('t')
+            plt.grid()
+            plt.savefig('/home/michele/Desktop/u.png')
+            # plt.show()
 
 
         # EE position
         print("\n")
         end_opt = [q1_opt[N-1], q2_opt[N-1], q3_opt[N-1], q4_opt[N-1], q5_opt[N-1], q6_opt[N-1], q7_opt[N-1], q8_opt[N-1], q9_opt[N-1], q10_opt[N-1], q11_opt[N-1], q12_opt[N-1]]
-        x_pos = _p_tip(end_opt, L_links)
+        
+        x_pos = _p_tip(end_opt, ConstFishSiply.L)
         v_end = get_vel_err(end_opt)
         
         print(f"End effector pos     :  {np.array([np.round(float(value), 2) for value in x_pos])}")
@@ -313,9 +357,15 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         x_original = np.linspace(0, 1, len(u1_opt)) 
         x_target = np.linspace(0, 1, int(_max_episode_length_s))  
         interpolation_func = interp1d(x_original, u1_opt, kind='linear')
+        
+        # x_original_q1 = np.linspace(0, 1, len(q1_opt)) 
+        # x_target_q1 = np.linspace(0, 1, int(_max_episode_length_s))  
+        # interpolation_func_q1 = interp1d(x_original_q1, q1_opt, kind='linear')
+        # q1_opt = interpolation_func_q1(x_target_q1) 
 
         u1_opt = interpolation_func(x_target)
-        
+    
+        # return u1_opt, q1_opt
         return u1_opt
         
     else:
@@ -324,14 +374,12 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         return u1_opt
 
 
-# if __name__ == "__main__":
-#     u_opt = main_fun_optmial_casadi()
-#     print('\n')
-#     # print(dir(u_opt), '\n')
-#     # print(np.round(u_opt,3), '\n')
-#     u_opt = np.array(u_opt)
-#     print(f"Control len   : {len(u_opt)}")
-#     print(f"Control shape : {np.shape(u_opt)}")
-#     print(f"Control type  : {type(u_opt)}")
+if __name__ == "__main__":
+    u_opt = main_fun_optmial_casadi()
+    print('\n')
+    u_opt = np.array(u_opt)
+    print(f"Control len   : {len(u_opt)}")
+    print(f"Control shape : {np.shape(u_opt)}")
+    print(f"Control type  : {type(u_opt)}")
     
 
