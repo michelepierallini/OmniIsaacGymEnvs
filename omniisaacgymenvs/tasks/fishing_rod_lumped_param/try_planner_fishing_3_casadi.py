@@ -28,8 +28,11 @@ class ConstFishSiply:
     alp_vel = 0.25e1
     alp_pos_X = 1e0
     alph_pos_Y = 1e15
+    T = 1.0
+    N = 200
+    DT = T / N
+    n_int = 1
 
-    
     max_iter_ipopt = 1e4
     u_bound = 10
     ipopt_tol = 1e-4
@@ -119,7 +122,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
                             pos_d=[2.58, 0.15], 
                             _max_episode_length_s=100,
                             vel_des=10.0, 
-                            wanna_plot=True):
+                            wanna_plot=False):
     ''' pos_des [Z_coordinate, Y_coordinate] [m], vel_des Module of the velocity [m/s] '''
     print('\n\n')
     
@@ -140,13 +143,13 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         n_tracking = 1
     
     # Simulation time
-    T = 1.0
+    T = ConstFishSiply.T
     # Horizon length (number of optimization steps)
-    N = 200
+    N = ConstFishSiply.N
     # Discretization step (time between two optimization steps)
     DT = T / N
     # Number of integrations between two steps
-    n_int = 1
+    n_int = ConstFishSiply.n_int
     # Integration step
     h = DT / n_int
     u_lb, u_ub = -ConstFishSiply.u_bound , ConstFishSiply.u_bound 

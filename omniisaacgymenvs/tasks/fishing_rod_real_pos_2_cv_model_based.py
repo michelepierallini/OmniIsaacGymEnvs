@@ -171,14 +171,14 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             pos_d = np.array([pos_des_np_mean, des_y_coordinate_np_mean])
         vel_d = -vel_lin_des_np_mean
         
-        # self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
-        #                                             pos_d=pos_d, 
-        #                                             _max_episode_length_s=self._max_episode_length_s,
-        #                                             vel_des=vel_d)
-        self.u_model_based = main_fun_optmial_casadi()
+        self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
+                                                    pos_d=pos_d, 
+                                                    _max_episode_length_s=self._max_episode_length_s,
+                                                    vel_des=vel_d)
+        # self.u_model_based = main_fun_optmial_casadi()
         
-        # self.u_model_based = -np.array(self.u_model_based)
-        self.u_model_based = np.array(self.u_model_based) # (_n_envs, time)
+        self.u_model_based = -np.array(self.u_model_based)
+        # self.u_model_based = np.array(self.u_model_based) # (_n_envs, time)
         self.u_model_based_torch = torch.tensor(self.u_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(self._num_envs, 1)
                       
         print('\n')
