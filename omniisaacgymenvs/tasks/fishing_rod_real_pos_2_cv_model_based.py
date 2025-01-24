@@ -54,9 +54,9 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
         self.WANNA_MODEL_BASED_HELP_DUMMY = False
         amp = self._task_cfg["env"]["initState"]["ampK"] 
-        k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
+        k_ii = 1.75 * amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        d_ii = 1.6 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
+        d_ii = 1.75 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
@@ -177,7 +177,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
                                                     vel_des=vel_d)
         # self.u_model_based = main_fun_optmial_casadi()
         
-        self.u_model_based = -np.array(self.u_model_based)
+        self.u_model_based = -np.array(self.u_model_based) # (_n_envs, time)
         # self.u_model_based = np.array(self.u_model_based) # (_n_envs, time)
         self.u_model_based_torch = torch.tensor(self.u_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(self._num_envs, 1)
                       
@@ -552,7 +552,6 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             self.tip_vel_save = torch.cat([self.tip_vel_save, self.tip_vel_lin], dim=1) 
             self._pos_des_save_3D = torch.cat([self._pos_des_save_3D, self._ball_position], dim=1) 
             self._vel_lin_des_save = torch.cat([self._vel_lin_des_save, self._vel_lin_des.unsqueeze(1)], dim=1)  
-            self.torque_save = torch.cat([self.torque_save, self.torques_to_print], dim=1)
             self.torque_save = torch.cat([self.torque_save, self.torques_to_print.unsqueeze(-1)], dim=1)            
                   
         if (self.progress_buf * self._dt >= self._max_episode_length_s).all():

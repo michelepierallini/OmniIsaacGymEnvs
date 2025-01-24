@@ -24,6 +24,7 @@ class ConstFishSiply:
     k = 1e0 * vertcat(0, 34.61, 17.20, 11.89, 12.61, 8.88, 3.65, 3.05, 6.4, 2.63, 3.02, 1.37)
     d = 5e-1 * vertcat(0.19, 0.16, 0.08, 0.06, 0.06, 0.04, 0.02, 0.15, 0.3, 0.1, 0.15, 0.06)
     L = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
+    toll_init = 0.001
     
     alp_vel = 0.25e1
     alp_pos_X = 1e0
@@ -39,6 +40,8 @@ class ConstFishSiply:
     linear_solver = 'ma27'
     warn_initial_bounds = 1
     
+    linewidth = 3
+    fontsize = 15
 
 def compute_dyn(x, action):
     ampli = ConstFishSiply.ampli
@@ -121,8 +124,8 @@ def get_vel_X(x):
 def main_fun_optmial_casadi(tracking_Z_bool=True,
                             pos_d=[2.58, 0.15], 
                             _max_episode_length_s=100,
-                            vel_des=10.0, 
-                            wanna_plot=False):
+                            vel_des=-10.0, 
+                            wanna_plot=True):
     ''' pos_des [Z_coordinate, Y_coordinate] [m], vel_des Module of the velocity [m/s] '''
     print('\n\n')
     
@@ -132,7 +135,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     if isinstance(vel_des, torch.Tensor):
         vel_des = vel_des.cpu().numpy() if vel_des.is_cuda else vel_des.numpy()
     
-    # Direct multiple shooting optimization
+    ## Direct multiple shooting optimization
     N_states = ConstFishSiply.n * 2
     # N_joints = int(N_states / 2)
     N_controls = 1
@@ -142,18 +145,18 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     else:
         n_tracking = 1
     
-    # Simulation time
+    ## Simulation time
     T = ConstFishSiply.T
-    # Horizon length (number of optimization steps)
+    ## Horizon length (number of optimization steps)
     N = ConstFishSiply.N
-    # Discretization step (time between two optimization steps)
+    ## Discretization step (time between two optimization steps)
     DT = T / N
-    # Number of integrations between two steps
+    ## Number of integrations between two steps
     n_int = ConstFishSiply.n_int
-    # Integration step
+    ## Integration step
     h = DT / n_int
     u_lb, u_ub = -ConstFishSiply.u_bound , ConstFishSiply.u_bound 
-    x0 = [0.001] * N_states 
+    x0 = [ConstFishSiply.toll_init] * N_states 
     u0 = [0.0] 
     pos_des = vertcat(pos_d) # desired position final   
 
@@ -171,7 +174,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     # vel_fun = Function('get_vel_err', [x], [vel_err])
     # vel_X = get_vel_X(x)
 
-    # Integrator Contact H-F Phase
+    ## Integrator Contact H-F Phase
     X0 = MX.sym('X0', N_states)
     U = MX.sym('U', N_controls)
     X = X0
@@ -184,20 +187,20 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     ## dynamic function to be integrated
     F_dynamics = Function('F_dynamics', [X0, U], [X, Q], ['x0', 'u0'], ['xf', 'qf'])
 
-    # Start with an empty NLP
-    w, w0= [], [] # intial guess
+    ## Start with an empty NLP
+    w, w0 = [], [] # intial guess
     lbw, ubw = [], []
     J = 0
     G = [] # constarint set 
     lbg, ubg = [], [] # bound set 
 
-    # "Lift" initial conditions
+    ## "Lift" initial conditions
     Xk = MX.sym('X0', N_states)
     w += [Xk]   # It will create a structure like [X0, U_0, X1, U_1 ...]
     lbw += x0   # bound only for states
     ubw += x0
 
-    # Initial dynamics propagation with constant input
+    ## Initial dynamics propagation with constant input
     x0_k = x0
     u0_k = u0
     w0 += x0_k
@@ -219,7 +222,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
 
     w_last = w0
 
-    # Formulate the NLP
+    ## Formulate the NLP
     for k in range(N):
         # New NLP variable for the control
         Uk = MX.sym('U_' + str(k), N_controls)
@@ -231,7 +234,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
 
         Xk_end = Fk['xf']
         J = J + Fk['qf']
-        # New NLP variable for state at end of interval
+        ## New NLP variable for state at end of interval
         Xk = MX.sym('X_' + str(k+1), N_states)
         w += [Xk]
         lbw += [-inf] * N_states  # bound only for states
@@ -242,14 +245,14 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         lbg += [0.0] * N_states
         ubg += [0.0] * N_states
         
-        # # Velocities constraints
+        ## Velocities constraints
         # vel_k = get_vel_X(Xk)
         # G += [vel_k]
         # lbg += [-inf] # velocity must be less than 0, so no lower bound (or -inf)
         # ubg += [0.0]  
         
-        #print(f"\tAdding constraints {lbg} and {ubg} for step {k} \n")
-        # final step
+        # print(f"\tAdding constraints {lbg} and {ubg} for step {k} \n")
+        ## final step
         if k == N-1:
             # Xk_target = Xk_end
             pos_k = _p_tip(Xk, ConstFishSiply.L)
@@ -260,8 +263,8 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
             # ubg += [0.01]
                         
             G += [pos_k[n_tracking] - pos_d[n_tracking]]    
-            lbg += [-0.001]
-            ubg += [0.001]
+            lbg += [-ConstFishSiply.toll_init]
+            ubg += [ConstFishSiply.toll_init]
             # G += [vel_k - vel_des]
             # lbg += [-5]
             # ubg += [5]
@@ -270,7 +273,10 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     # vel_k = get_vel_err(Xk_end)
     vel_k = get_vel_X(Xk_end)
     
-    J = J + ConstFishSiply.alp_vel * (vel_k - vel_des)**2 + ConstFishSiply.alp_pos_X * (pos_k[0] - pos_des[0])**2 + ConstFishSiply.alp_pos_X * (pos_k[1] - pos_des[1])**2
+    J = J \
+        + ConstFishSiply.alp_vel * (vel_k - vel_des)**2 \
+        + ConstFishSiply.alp_pos_X * (pos_k[0] - pos_des[0])**2 \
+        + ConstFishSiply.alp_pos_X * (pos_k[1] - pos_des[1])**2
     
     ## Create an NLP solver  
     prob = {'f': J, 'x': vertcat(*w), 'g': vertcat(*G)}
@@ -294,12 +300,11 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         # q_opt_array = np.array(q_opt)
         # # qq1_opt1 = q_opt_array[:, 1]
         
-        # Optimal joint trajectories 
         q1_opt, q2_opt, q3_opt, q4_opt = [], [], [], []
         q5_opt, q6_opt, q7_opt, q8_opt = [], [], [], []
         q9_opt, q10_opt, q11_opt, q12_opt = [], [], [], []
-        # Optimal controls
         u1_opt = []
+        p_tip_opt_X, p_tip_opt_Z, p_tip_opt_app = [], [], []
         
         for i in range(N):
             q1_opt += [w_opt[i*(N_states+N_controls)]]
@@ -314,45 +319,68 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
             q10_opt += [w_opt[i * (N_states + N_controls) + 9]]
             q11_opt += [w_opt[i * (N_states + N_controls) + 10]]
             q12_opt += [w_opt[i * (N_states + N_controls) + 11]]
+            
+            q_opt = [q1_opt[i], q2_opt[i], q3_opt[i], q4_opt[i], 
+                     q5_opt[i], q6_opt[i], q7_opt[i], q8_opt[i], 
+                    q9_opt[i], q10_opt[i], q11_opt[i], q12_opt[i]]
+        
+            p_tip_opt_app.append(_p_tip(q_opt, ConstFishSiply.L))
+            p_tip_opt_X.append(float(p_tip_opt_app[i][1].full()))
+            p_tip_opt_Z.append(float(p_tip_opt_app[i][0].full()))
 
-            u1_opt += [w_opt[i*(N_states+N_controls) + 24]]
+            u1_opt += [w_opt[i*(N_states+N_controls) + ConstFishSiply.n * 2]]
             
         if wanna_plot:
             tgrid = np.linspace(0, T, N)
             plt.figure(1)
             plt.clf()
-            plt.plot(tgrid, q1_opt, '-')
-            plt.plot(tgrid, q2_opt, '-')
-            plt.plot(tgrid, q3_opt, '-')
-            plt.plot(tgrid, q4_opt, '-')
-            plt.plot(tgrid, q5_opt, '-')
-            plt.plot(tgrid, q6_opt, '-')
-            plt.plot(tgrid, q7_opt, '-')
-            plt.plot(tgrid, q8_opt, '-')
-            plt.plot(tgrid, q9_opt, '-')
-            plt.plot(tgrid, q10_opt, '-')
-            plt.plot(tgrid, q11_opt, '-')
-            plt.plot(tgrid, q12_opt, '-')
-            plt.ylabel('q')
-            plt.xlabel('t')
+            plt.plot(tgrid, q1_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q2_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q3_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q4_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q5_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q6_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q7_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q8_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q9_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q10_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q11_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, q12_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.ylabel('q [rad]', fontsize=ConstFishSiply.fontsize)
+            plt.xlabel('t [sec]', fontsize=ConstFishSiply.fontsize)
             plt.grid()
-            plt.legend(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12'])
+            plt.legend(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 
+                        'q7', 'q8', 'q9', 'q10', 'q11', 'q12'], fontsize=ConstFishSiply.fontsize)
             plt.savefig('/home/michele/Desktop/q.png')
             # plt.show()
 
             plt.figure(2)
             plt.clf()
-            plt.plot(tgrid, u1_opt, '-')
-            plt.ylabel('u')
-            plt.xlabel('t')
+            plt.plot(tgrid, u1_opt, '-', linewidth=ConstFishSiply.linewidth)
+            plt.ylabel('u [Nm]', fontsize=ConstFishSiply.fontsize)
+            plt.xlabel('t [sec]', fontsize=ConstFishSiply.fontsize)
             plt.grid()
             plt.savefig('/home/michele/Desktop/u.png')
             # plt.show()
-
+            
+            plt.figure(3)
+            plt.clf()
+            plt.plot(tgrid, p_tip_opt_X, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, p_tip_opt_Z, '-', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, pos_d[0] * np.ones(len(p_tip_opt_X)), '--', color='r', linewidth=ConstFishSiply.linewidth)
+            plt.plot(tgrid, pos_d[1] * np.ones(len(p_tip_opt_X)), '--', color='r', linewidth=ConstFishSiply.linewidth)
+            plt.ylabel('pos tip [m]', fontsize=ConstFishSiply.fontsize)
+            plt.xlabel('t [sec]', fontsize=ConstFishSiply.fontsize)
+            plt.grid()
+            plt.legend(['X', 'Z', 'Z des', 'X des'], fontsize=ConstFishSiply.fontsize)
+            plt.savefig('/home/michele/Desktop/tip_pos.png')
+            # plt.show()
 
         # EE position
         print("\n")
-        end_opt = [q1_opt[N-1], q2_opt[N-1], q3_opt[N-1], q4_opt[N-1], q5_opt[N-1], q6_opt[N-1], q7_opt[N-1], q8_opt[N-1], q9_opt[N-1], q10_opt[N-1], q11_opt[N-1], q12_opt[N-1]]
+        end_opt = [q1_opt[N-1], q2_opt[N-1], q3_opt[N-1], q4_opt[N-1], 
+                   q5_opt[N-1], q6_opt[N-1], q7_opt[N-1], q8_opt[N-1], 
+                   q9_opt[N-1], q10_opt[N-1], q11_opt[N-1], q12_opt[N-1]]
         
         x_pos = _p_tip(end_opt, ConstFishSiply.L)
         v_end = get_vel_err(end_opt)
@@ -382,12 +410,12 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         return u1_opt
 
 
-if __name__ == "__main__":
-    u_opt = main_fun_optmial_casadi()
-    print('\n')
-    u_opt = np.array(u_opt)
-    print(f"Control len   : {len(u_opt)}")
-    print(f"Control shape : {np.shape(u_opt)}")
-    print(f"Control type  : {type(u_opt)}")
+# if __name__ == "__main__":
+#     u_opt = main_fun_optmial_casadi()
+#     print('\n')
+#     u_opt = np.array(u_opt)
+#     print(f"Control len   : {len(u_opt)}")
+#     print(f"Control shape : {np.shape(u_opt)}")
+#     print(f"Control type  : {type(u_opt)}")
     
 
