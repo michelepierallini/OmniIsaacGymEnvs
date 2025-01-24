@@ -402,11 +402,8 @@ def resampleData(data, n):
     """ 
     n_real_data = np.max(np.shape(data))
     step_exp = np.linspace(0, n - 1, n_real_data)
-    # Interpolate each column using linear interpolation
     f = interp1d(step_exp, data, axis=0, kind='linear')
-    # Create a new array of indices to resample at
     time_real = np.linspace(0, n-1, n)
-    # Resample each column using the interpolated function
     resampled_data = f(time_real)
     
     return resampled_data

@@ -1,6 +1,12 @@
 from casadi import *
 import numpy as np
-import matplotlib.pyplot as plt
+
+from matplotlib import pyplot as plt
+from matplotlib import rc
+
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
+plt.rcParams['text.usetex'] = True
 
 import torch 
 from scipy.interpolate import interp1d
@@ -333,6 +339,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
             u1_opt += [w_opt[i*(N_states+N_controls) + ConstFishSiply.n * 2]]
             
         if wanna_plot:
+            desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
             tgrid = np.linspace(0, T, N)
             plt.figure(1)
             plt.clf()
@@ -348,21 +355,22 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
             plt.plot(tgrid, q10_opt, '-', linewidth=ConstFishSiply.linewidth)
             plt.plot(tgrid, q11_opt, '-', linewidth=ConstFishSiply.linewidth)
             plt.plot(tgrid, q12_opt, '-', linewidth=ConstFishSiply.linewidth)
-            plt.ylabel('q [rad]', fontsize=ConstFishSiply.fontsize)
-            plt.xlabel('t [sec]', fontsize=ConstFishSiply.fontsize)
+            plt.ylabel(r'$ q\,\, [rad]$', fontsize=ConstFishSiply.fontsize)
+            plt.xlabel(r'$t\,\, [sec]$', fontsize=ConstFishSiply.fontsize)
             plt.grid()
-            plt.legend(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 
-                        'q7', 'q8', 'q9', 'q10', 'q11', 'q12'], fontsize=ConstFishSiply.fontsize)
-            plt.savefig('/home/michele/Desktop/q.png')
+            plt.legend([r'$q_1$', r'$q_2$', r'$q_3$', r'$q_4$', r'$q_5$', r'$q_6$', \
+                        r'$q_7$', r'$q_8$', r'$q_9$', r'$q_{10}$', r'$q_{11}$', r'$q_{12}$'],\
+                        fontsize=ConstFishSiply.fontsize)
+            plt.savefig(os.path.join(desktop_path, 'q.png'))
             # plt.show()
 
             plt.figure(2)
             plt.clf()
             plt.plot(tgrid, u1_opt, '-', linewidth=ConstFishSiply.linewidth)
             plt.ylabel('u [Nm]', fontsize=ConstFishSiply.fontsize)
-            plt.xlabel('t [sec]', fontsize=ConstFishSiply.fontsize)
+            plt.xlabel(r'$t\,\, [sec]$', fontsize=ConstFishSiply.fontsize)
             plt.grid()
-            plt.savefig('/home/michele/Desktop/u.png')
+            plt.savefig(os.path.join(desktop_path, 'u.png') )
             # plt.show()
             
             plt.figure(3)
@@ -371,11 +379,11 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
             plt.plot(tgrid, p_tip_opt_Z, '-', linewidth=ConstFishSiply.linewidth)
             plt.plot(tgrid, pos_d[0] * np.ones(len(p_tip_opt_X)), '--', color='r', linewidth=ConstFishSiply.linewidth)
             plt.plot(tgrid, pos_d[1] * np.ones(len(p_tip_opt_X)), '--', color='r', linewidth=ConstFishSiply.linewidth)
-            plt.ylabel('pos tip [m]', fontsize=ConstFishSiply.fontsize)
-            plt.xlabel('t [sec]', fontsize=ConstFishSiply.fontsize)
+            plt.ylabel(r'$ pos\,\, tip\,\, [m]$', fontsize=ConstFishSiply.fontsize)
+            plt.xlabel(r'$t\,\, [sec]$', fontsize=ConstFishSiply.fontsize)
             plt.grid()
-            plt.legend(['X', 'Z', 'Z des', 'X des'], fontsize=ConstFishSiply.fontsize)
-            plt.savefig('/home/michele/Desktop/tip_pos.png')
+            plt.legend([r'$X$', r'$Z$', r'$Z_{des}$', r'$X_{des}$'], fontsize=ConstFishSiply.fontsize)
+            plt.savefig(os.path.join(desktop_path, 'pos_tip.png') )
             # plt.show()
 
         # EE position
@@ -413,12 +421,12 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         return u1_opt
 
 
-# if __name__ == "__main__":
-#     u_opt = main_fun_optmial_casadi()
-#     print('\n')
-#     u_opt = np.array(u_opt)
-#     print(f"Control len   : {len(u_opt)}")
-#     print(f"Control shape : {np.shape(u_opt)}")
-#     print(f"Control type  : {type(u_opt)}")
+if __name__ == "__main__":
+    u_opt = main_fun_optmial_casadi()
+    print('\n')
+    u_opt = np.array(u_opt)
+    print(f"Control len   : {len(u_opt)}")
+    print(f"Control shape : {np.shape(u_opt)}")
+    print(f"Control type  : {type(u_opt)}")
     
 
