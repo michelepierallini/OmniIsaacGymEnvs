@@ -45,6 +45,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self._count = 0
         self.epoch_num = 0
         self.epoch_num_save = 0
+        self.epoch_num_save_train = 0
         self.PRINT_INT = self._task_cfg["env"]["printInt"]
         self._num_observations = self._task_cfg["env"]["numObservations"]
         self.tracking_Z_bool = tracking_Z
@@ -54,13 +55,14 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
         self.WANNA_MODEL_BASED_HELP_DUMMY = False
         amp = self._task_cfg["env"]["initState"]["ampK"] 
-        k_ii = 1.75 * amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
+        k_ii = 1.5 * amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        d_ii = 1.75 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
+        d_ii = 2.0 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
-        self.D_matrix = torch.diag(d_ii) + torch.diag(d_ii[:-1] / 2e1, diagonal=-1) + torch.diag(d_ii[:-1] / 2e1, diagonal=1) + torch.diag(d_ii[:-2] / 5e1, diagonal=-2) + torch.diag(d_ii[:-2] / 5e1, diagonal=2)
+        self.D_matrix = torch.diag(d_ii) + torch.diag(d_ii[:-1] / 2e1, diagonal=-1) + torch.diag(d_ii[:-1] / 2e1, diagonal=1) + torch.diag(d_ii[:-2] / 2e1, diagonal=-2) + torch.diag(d_ii[:-2] / 2e1, diagonal=2)
+        # self.D_matrix = torch.diag(d_ii) + torch.diag(d_ii[:-1] / 2e1, diagonal=-1) + torch.diag(d_ii[:-1] / 2e1, diagonal=1) + torch.diag(d_ii[:-2] / 5e1, diagonal=-2) + torch.diag(d_ii[:-2] / 5e1, diagonal=2)
         self.K_matrix = torch.diag(k_ii) + torch.diag(k_ii[:-1] / 2e1, diagonal=-1) + torch.diag(k_ii[:-1] / 2e1, diagonal=1) + torch.diag(k_ii[:-2] / 5e1, diagonal=-2) + torch.diag(k_ii[:-2] / 5e1, diagonal=2)
         self.D_matrix = self.D_matrix.clone().detach().to(dtype=torch.float, device=self._device).requires_grad_(False)
         self.K_matrix = self.K_matrix.clone().detach().to(dtype=torch.float, device=self._device).requires_grad_(False)
@@ -169,7 +171,11 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
             pos_d = np.array([des_y_coordinate_np_mean, pos_des_np_mean])
         else:
             pos_d = np.array([pos_des_np_mean, des_y_coordinate_np_mean])
-        vel_d = -vel_lin_des_np_mean
+        # vel_d = -vel_lin_des_np_mean
+        vel_d = vel_lin_des_np_mean
+        
+        print(f'[INFO] Desired Position -> Opt : {pos_d}')
+        print(f'[INFO] Desired Velocity -> Opt : {np.round(vel_d, 2)}')
         
         self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
                                                     pos_d=pos_d, 
@@ -368,7 +374,8 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
                 else:
                     pass
                 
-                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) + self.u_model_based_torch[:, self.progress_buf[0] - 1] - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
+                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) \
+                    + self.u_model_based_torch[:, self.progress_buf[0] - 1] - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
                 
                 self.torques_to_print = torques
                 self.torques_all[:, 0] = torques
@@ -450,9 +457,25 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self.tip_vel_save = torch.zeros(num_resets, 3, dtype=torch.float, device=self._device)
         self._pos_des_save_3D = torch.zeros(num_resets, 3, dtype=torch.float, device=self._device)
         self._vel_lin_des_save = torch.zeros((num_resets, 0), dtype=torch.float, device=self._device)
-        
         self.torque_save = torch.zeros(num_resets, self._n_actuators, dtype=torch.float, device=self._device)
         
+        if (self.epoch_num_save_train > 2) and (self.progress_buf[:]).all() > 1:    ## never doing this 
+        
+            if self.tracking_Z_bool:
+                ## pos_d = [Z, X]
+                pos_d = np.array([torch.mean(self.des_y_coordinate[env_ids]).cpu().numpy(), torch.mean(self._pos_des[env_ids]).cpu().numpy()])
+            else:
+                pos_d = np.array([torch.mean(self._pos_des[env_ids]).cpu().numpy(), torch.mean(self.des_y_coordinate[env_ids]).cpu().numpy()])
+            vel_d = -torch.mean(self._vel_lin_des[env_ids]).cpu().numpy()
+            
+            self.u_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
+                                                        pos_d=pos_d, 
+                                                        _max_episode_length_s=self._max_episode_length_s,
+                                                        vel_des=vel_d)
+            
+            self.u_model_based = -np.array(self.u_model_based) # (_n_envs, time)
+            self.u_model_based_torch[env_ids] = torch.tensor(self.u_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(env_ids.size(0), 1)
+            
         indices = env_ids.to(dtype=torch.int32)
          
         self._fishingrods.set_joint_positions(self.dof_pos, indices=indices)
@@ -469,6 +492,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self._last_actions[env_ids] = 0.     
         self._last_config[env_ids] = 0.
         self._last_joint_vel[env_ids] = 0.
+        self.epoch_num_save_train += 1
                 
         # fill extras
         self.extras["episode"] = {}
@@ -540,9 +564,6 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
 
         self._err_vel_all[:, self.progress_buf[0] - 1] = err_reached_vel
         self._err_pos_all[:, self.progress_buf[0] - 1] = err_reached_pos
-        
-        ## velocity reward
-        # self.rew_buf[:] += torch.where(module_vel < 0, -0.1, 0.1)
         
         if self._cfg["test"]:
             self.dof_pos_save = torch.cat([self.dof_pos_save, self.dof_pos], dim=1) 

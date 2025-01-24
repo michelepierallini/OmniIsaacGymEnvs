@@ -67,11 +67,11 @@ params:
     
     ## same of the episode end or a multiple, i.e., episodeLength / dt
   
-    # horizon_length: 750  ## to test the dynamics
-    # minibatch_size: 750  ## to test the dynamics
+    horizon_length: 750  ## to test the dynamics
+    minibatch_size: 750  ## to test the dynamics
 
-    horizon_length: 500     # -->  (dt 0.005) # from FishingRodPos_X_008_pos_new_2
-    minibatch_size: 12800   # -->  (dt 0.005) # from FishingRodPos_X_008_pos_new_2
+    # horizon_length: 500     # -->  (dt 0.005) # from FishingRodPos_X_008_pos_new_2
+    # minibatch_size: 12800   # -->  (dt 0.005) # from FishingRodPos_X_008_pos_new_2
 
     mini_epochs: 5 # FishingRodPos_X_002_pos_new_2_vel_cv
     critic_coef: 2 # FishingRodPos_X_002_pos_new_2_vel_cv

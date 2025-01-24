@@ -25,6 +25,7 @@ class ConstFishSiply:
     d = 5e-1 * vertcat(0.19, 0.16, 0.08, 0.06, 0.06, 0.04, 0.02, 0.15, 0.3, 0.1, 0.15, 0.06)
     L = vertcat(0.7, 0.35, 0.35, 0.20, 0.20, 0.15, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1)
     toll_init = 0.001
+    N_control = 1
     
     alp_vel = 0.25e1
     alp_pos_X = 1e0
@@ -42,6 +43,7 @@ class ConstFishSiply:
     
     linewidth = 3
     fontsize = 15
+
 
 def compute_dyn(x, action):
     ampli = ConstFishSiply.ampli
@@ -115,7 +117,8 @@ def get_vel_X(x):
     J = _jacobian_diff(q, L)
     J = J[0]
     vel = mtimes(J, q_dot)
-    return vel[0]
+    ## [Z, X] 
+    return vel[1]
 
 ########################################################################################################################
 ## Starting with the Optmial Plannning anf Control Problem
@@ -137,8 +140,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     
     ## Direct multiple shooting optimization
     N_states = ConstFishSiply.n * 2
-    # N_joints = int(N_states / 2)
-    N_controls = 1
+    N_controls = ConstFishSiply.N_control
     
     if tracking_Z_bool:
         n_tracking = 0
@@ -189,7 +191,7 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
 
     ## Start with an empty NLP
     w, w0 = [], [] # intial guess
-    lbw, ubw = [], []
+    lbw, ubw = [], [] # bound set 
     J = 0
     G = [] # constarint set 
     lbg, ubg = [], [] # bound set 
@@ -224,12 +226,12 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
 
     ## Formulate the NLP
     for k in range(N):
-        # New NLP variable for the control
+        ## New NLP variable for the control
         Uk = MX.sym('U_' + str(k), N_controls)
         w += [Uk]
         lbw += [u_lb]
         ubw += [u_ub]
-        # Integrate till the end of the interval
+        ## Integrate till the end of the interval
         Fk = F_dynamics(x0=Xk, u0=Uk)  # return a DM type structure
 
         Xk_end = Fk['xf']
@@ -251,7 +253,6 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         # lbg += [-inf] # velocity must be less than 0, so no lower bound (or -inf)
         # ubg += [0.0]  
         
-        # print(f"\tAdding constraints {lbg} and {ubg} for step {k} \n")
         ## final step
         if k == N-1:
             # Xk_target = Xk_end
@@ -289,7 +290,8 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
     w_opt = sol['x'].full().flatten()
     
     if stats['return_status'] == 'Solve_Succeeded':
-        print("Optimization successful!")
+        print('\n')
+        print("[INFO]: Optimization successful!")
         
         # q_opt, u1_opt = [], []
         # for i in range(N):
@@ -405,7 +407,8 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         return u1_opt
         
     else:
-        print(f"Optimization failed: {stats['return_status']}")
+        print('\n')
+        print(f"[INFO]: Optimization failed: {stats['return_status']}")
         u1_opt = main_fun_optmial_casadi()
         return u1_opt
 
