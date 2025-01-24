@@ -1,20 +1,12 @@
 import numpy as np
 
-# from fishing_rod_12_joints._inertia_matrix import _inertia_matrix  
-# from fishing_rod_12_joints._coriolis_matrix import _coriolis_matrix 
-# from fishing_rod_12_joints._gravity_matrix import _gravity_matrix 
-# from fishing_rod_12_joints._stiffness_torque import _stiffness_torque 
-# from fishing_rod_12_joints._p_tip import _p_tip
-# from fishing_rod_12_joints._damping_torque import _damping_torque
-# from fishing_rod_12_joints._jacobian_diff import _jacobian_diff
-
-from fishing_rod_12_joints_np._inertia_matrix_np import _inertia_matrix  
-from fishing_rod_12_joints_np._coriolis_matrix_np import _coriolis_matrix 
-from fishing_rod_12_joints_np._gravity_matrix_np import _gravity_matrix 
-from fishing_rod_12_joints_np._stiffness_torque_np import _stiffness_torque 
-from fishing_rod_12_joints_np._p_tip_np import _p_tip
-from fishing_rod_12_joints_np._damping_torque_np import _damping_torque
-from fishing_rod_12_joints_np._jacobian_diff_np import _jacobian_diff
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._inertia_matrix_np import _inertia_matrix  
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._coriolis_matrix_np import _coriolis_matrix 
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._gravity_matrix_np import _gravity_matrix 
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._stiffness_torque_np import _stiffness_torque 
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._p_tip_np import _p_tip
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._damping_torque_np import _damping_torque
+from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np._jacobian_diff_np import _jacobian_diff
 
 if __name__ == '__main__':
     n = 12
