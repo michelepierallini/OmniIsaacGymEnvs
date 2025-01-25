@@ -55,14 +55,18 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
         self.WANNA_MODEL_BASED_HELP_DUMMY = False
         amp = self._task_cfg["env"]["initState"]["ampK"] 
-        k_ii = 1.5 * amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
+        
+        # 2BeTested: FishingRodPos_X_010_pos_new_2_Kpiu_MB
+        # k_ii = 2.0 * amp, d_ii = 2.0 * amp 
+       
+        ## FishingRodPos_X_009_pos_new_2_Kpiu_MB
+        k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
                         12.61, 8.88, 4.04, 3.65, 3.05, 5.4, 3.67, 2.9, 3.02, 2.13, 1.6, 1.37, 1.01, 0.81, 0.6])
-        d_ii = 2.0 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
+        d_ii = 1.6 * amp * torch.tensor([0.0, 0.191, 0.164, 0.127, 0.082, 0.056, 0.043, 0.060, 0.042, 0.019,
                         0.017, 0.015, 0.020, 0.017, 0.015, 0.014, 0.011, 0.009, 0.007, 0.003, 0.003, 0.003])
         self.d_ii_vect = d_ii.to(self._device)
         self.k_ii_vect = k_ii.to(self._device)
         self.D_matrix = torch.diag(d_ii) + torch.diag(d_ii[:-1] / 2e1, diagonal=-1) + torch.diag(d_ii[:-1] / 2e1, diagonal=1) + torch.diag(d_ii[:-2] / 2e1, diagonal=-2) + torch.diag(d_ii[:-2] / 2e1, diagonal=2)
-        # self.D_matrix = torch.diag(d_ii) + torch.diag(d_ii[:-1] / 2e1, diagonal=-1) + torch.diag(d_ii[:-1] / 2e1, diagonal=1) + torch.diag(d_ii[:-2] / 5e1, diagonal=-2) + torch.diag(d_ii[:-2] / 5e1, diagonal=2)
         self.K_matrix = torch.diag(k_ii) + torch.diag(k_ii[:-1] / 2e1, diagonal=-1) + torch.diag(k_ii[:-1] / 2e1, diagonal=1) + torch.diag(k_ii[:-2] / 5e1, diagonal=-2) + torch.diag(k_ii[:-2] / 5e1, diagonal=2)
         self.D_matrix = self.D_matrix.clone().detach().to(dtype=torch.float, device=self._device).requires_grad_(False)
         self.K_matrix = self.K_matrix.clone().detach().to(dtype=torch.float, device=self._device).requires_grad_(False)
