@@ -52,6 +52,7 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.tasks.fishing_rod_real_pos_2 import FishingRodTaskPosDue
     from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv import FishingRodTaskPosDueCV
     from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv_model_based import FishingRodTaskPosDueCVModelBased
+    from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv_model_based_pos import FishingRodTaskPosDueCVModelBasedPos
     # from omniisaacgymenvs.tasks.softleg_jump_quattro import SoftlegJumpTaskQuattro
     from omniisaacgymenvs.tasks.softleg_jump_cinque import SoftlegJumpTaskCinque
 
@@ -84,7 +85,8 @@ def initialize_task(config, env, init_sim=True):
         # "FishingRodPos": FishingRodTaskPos
         "FishingRodPosDue" : FishingRodTaskPosDue,
         "FishingRodPosDueCV" : FishingRodTaskPosDueCV,
-        "FishingRodPosDueCVMB" : FishingRodTaskPosDueCVModelBased
+        "FishingRodPosDueCVMB" : FishingRodTaskPosDueCVModelBased,
+        "FishingRodPosDueCVMBPos": FishingRodTaskPosDueCVModelBasedPos
         }
 
     from .config_utils.sim_config import SimConfig

@@ -13,15 +13,15 @@ import numpy as np
 ### To run this code
 ## decomment what it is needed in task_util.py, i.e.,
 ## from omniisaacgymenvs.tasks.fishing_rod_real_pos_2_cv_model_based import FishingRodTaskPosDueCVModelBased
-## "FishingRodPosDueCVMB" : FishingRodTaskPosDueCVModelBased
+## "FishingRodPosDueCVMBPos" : FishingRodTaskPosDueCVModelBasedPos
 ####################################################################################################################################
 ## ISAAC_PYTHON -m venv tolopesca3 --system-site-package
 ## source tolopesca3/bin/activate
 ## source pyenvs.sh
-## (tolopesca3) michele@michele-Dell-G16-7630:~/Documents/OmniIsaacGymEnvs/omniisaacgymenvs$ python scripts/rlgames_train.py task=FishingRodPosDueCVMB num_envs=2 experiment=FishingRodPos_X_009_pos_new_2_Kpiu_MB headless=True
+## (tolopesca3) michele@michele-Dell-G16-7630:~/Documents/OmniIsaacGymEnvs/omniisaacgymenvs$ python scripts/rlgames_train.py task=FishingRodPosDueCVMBPos num_envs=2048 experiment=FishingRodPos_X_009_pos_new_2_Kpiu_MB_pos headless=True
 ####################################################################################################################################
 
-class FishingRodTaskPosDueCVModelBased(RLTask):
+class FishingRodTaskPosDueCVModelBasedPos(RLTask):
     def __init__(
         self,
         name,
@@ -181,15 +181,15 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         print(f'[INFO] Desired Position -> Opt : {pos_d}')
         print(f'[INFO] Desired Velocity -> Opt : {np.round(vel_d, 2)}')
         
-        self.u_model_based, _ = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
+        _, self.q1_model_based = main_fun_optmial_casadi(tracking_Z_bool=self.tracking_Z_bool, 
                                                     pos_d=pos_d, 
                                                     _max_episode_length_s=self._max_episode_length_s,
                                                     vel_des=vel_d)
-        # self.u_model_based, _ = main_fun_optmial_casadi()
         
-        self.u_model_based = -np.array(self.u_model_based) # (_n_envs, time)
-        # self.u_model_based = np.array(self.u_model_based) # (_n_envs, time)
-        self.u_model_based_torch = torch.tensor(self.u_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(self._num_envs, 1)
+        # self.q1_model_based = -np.array(self.q1_model_based) # (_n_envs, time)
+        # self.q1_model_based = np.array(self.q1_model_based) # (_n_envs, time)
+        
+        self.q1_model_based_torch = torch.tensor(self.q1_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(self._num_envs, 1)
                       
         print('\n')
         print('=' * self.PRINT_INT)
@@ -356,7 +356,7 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
         self.obs_buf[:, 8] = self.tip_acc_lin[:] / self._acc_scale
         self.obs_buf[:, 9] = self.tip_acc_lin_old[:] / self._acc_scale
         
-        self.obs_buf[:, 10] = self.u_model_based_torch[:, self.progress_buf[0] - 1] / self._action_scale
+        self.obs_buf[:, 10] = self.q1_model_based_torch[:, self.progress_buf[0] - 1] / self._action_scale
         self.obs_buf[:, -1] = (self._max_episode_length_s - self._count * self._dt) / self._max_episode_length_s
         
         observations = {self._fishingrods.name: {"obs_buf": self.obs_buf}}
@@ -378,8 +378,8 @@ class FishingRodTaskPosDueCVModelBased(RLTask):
                 else:
                     pass
                 
-                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] - self.dof_pos[:, 0] + help_term) \
-                    + self.u_model_based_torch[:, self.progress_buf[0] - 1] - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
+                torques = torch.clip( self._Kp * ( self._action_scale * self.actions[:, 0] + self.q1_model_based_torch[:, self.progress_buf[0] - 1] - self.dof_pos[:, 0] + help_term) \
+                    - self._Kd * self.dof_vel[:, 0], -self._max_effort, self._max_effort)
                 
                 self.torques_to_print = torques
                 self.torques_all[:, 0] = torques

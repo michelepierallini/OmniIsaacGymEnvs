@@ -8,7 +8,8 @@ rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 plt.rcParams['text.usetex'] = True
 
-import time
+import time    
+
 from termcolor import colored
 
 from omniisaacgymenvs.tasks.fishing_rod_lumped_param.fishing_rod_12_joints_np_casadi._coriolis_matrix_np import _coriolis_matrix
@@ -32,22 +33,68 @@ class ConstFishSiply:
     alp_pos_X = 1e0
     alp_pos_Y = 1e15
     T = 1.0 # Total simulation time (can be longer for MPC simulation)
-    N = 5 # 200 # Optimization horizon steps (MPC horizon)
+    N = 10 # 200 # Optimization horizon steps (MPC horizon)
     DT = T / N
     n_int = 1
     inf = 1e3
 
-    max_iter_ipopt = 1e4
+    max_iter_ipopt = 1e2
     u_bound = 10
-    ipopt_tol = 1e-4
+    ipopt_tol = 1e-1
     linear_solver = 'ma27'
     warn_initial_bounds = 1
 
     linewidth = 3
     fontsize = 15
 
+def casadi_inertia_matrix(q, L, m, I_zz):
+    result = _inertia_matrix(q, L, m, I_zz)
+    if isinstance(result, list): 
+        result = vertcat(*[vertcat(*row) for row in result])
+    elif isinstance(result, np.ndarray):  
+        result = vertcat(*[vertcat(*row.tolist()) for row in result])
+    return MX(result)
+
+def casadi_gravity_matrix(q, L, m, I_zz, g):
+    result = _gravity_matrix(q, L, m, I_zz, g)
+    if isinstance(result, (list, tuple)):
+        flat_result = []
+        for item in result:
+            if isinstance(item, (list, tuple)):
+                flat_result.extend(item)
+            else:
+                flat_result.append(item)
+        result = flat_result
+    elif isinstance(result, np.ndarray):
+        result = result.flatten().tolist()
+    return vertcat(*result)
+
+def casadi_p_tip(q, L):
+    result = _p_tip(q, L)
+    
+    if isinstance(result, (list, tuple)):
+        flat_result = []
+        for item in result:
+            if isinstance(item, (list, tuple)):
+                flat_result.extend(item)
+            else:
+                flat_result.append(item)
+        result = flat_result
+    
+    elif isinstance(result, np.ndarray):
+        result = result.flatten().tolist()
+    return vertcat(*result)
+
+def casadi_jacobian_diff(q, L):
+    result = _jacobian_diff(q, L)
+    if isinstance(result, list): 
+        result = vertcat(*[vertcat(*row) for row in result])
+    elif isinstance(result, np.ndarray):  
+        result = vertcat(*[vertcat(*row.tolist()) for row in result])
+    return MX(result)
 
 def compute_dyn(x, action):
+    # Extract constants from the class
     ampli = ConstFishSiply.ampli
     g = ConstFishSiply.g
     m = ConstFishSiply.m
@@ -62,10 +109,11 @@ def compute_dyn(x, action):
     q = reshape(q, n, 1)
     q_dot = reshape(q_dot, n, 1)
 
-    M = _inertia_matrix(q, L, m, I_zz)
-    iM = pinv(M[0][0])
-    G = _gravity_matrix(q, L, m, I_zz, g)
+    M = casadi_inertia_matrix(q, L, m, I_zz) 
+    iM = pinv(M[0][0])  
+    G = casadi_gravity_matrix(q, L, m, I_zz, g)  
     G = G[0][0]
+
     d2 = d[:-1]
     k2 = k[:-1]
 
@@ -84,17 +132,16 @@ def compute_dyn(x, action):
         K[i, i + 1] = k2[i] / ampli
 
     A = vertcat(1, DM.zeros(n-1, 1))
-    q_ddot = -mtimes(iM, MX(G) + mtimes(D, q_dot) + mtimes(K, q)) + mtimes(iM, A * action)  #  mtimes(C, q_dot)
+    q_ddot = -mtimes(iM, MX(G) + mtimes(D, q_dot) + mtimes(K, q)) + mtimes(iM, A * action)
 
     x_dot = vertcat(q_dot, q_ddot)
     return x_dot
-
 
 def get_pos_err(x):
     n = ConstFishSiply.n 
     q = x[:n]
     L = ConstFishSiply.L
-    pos = _p_tip(q, L)
+    pos = casadi_p_tip(q, L)
     pos = pos
     return pos
 
@@ -103,7 +150,7 @@ def get_vel_err(x):
     q = x[:n]
     q_dot = x[-n:]
     L = ConstFishSiply.L
-    J = _jacobian_diff(q, L)
+    J = casadi_jacobian_diff(q, L)
     J = J[0]
     vel = norm_2(mtimes(J, q_dot))
     return vel
@@ -113,7 +160,7 @@ def get_vel_X(x):
     q = x[:n]
     q_dot = x[-n:]
     L = ConstFishSiply.L
-    J = _jacobian_diff(q, L)
+    J = casadi_jacobian_diff(q, L)
     J = J[0]
     vel = mtimes(J, q_dot)
     ## [Z, X]
@@ -397,7 +444,6 @@ def run_mpc_control(pos_d=[2.58, 0.15],
     return control_history, state_history
 
 if __name__ == "__main__":
-    
     t_init = time.time()
     pos_des = [2.58, 0.15]
     vel_des = -10.0
@@ -411,3 +457,6 @@ if __name__ == "__main__":
     print(f"[INFO]: Control history type  : {type(control_history_np)}")
     print('=' * 50)
     print(f'[INFO]: Time task             : {np.round(t_end - t_init, 2)} sec')
+
+
+

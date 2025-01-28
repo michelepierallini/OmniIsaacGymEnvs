@@ -404,15 +404,15 @@ def main_fun_optmial_casadi(tracking_Z_bool=True,
         x_target = np.linspace(0, 1, int(_max_episode_length_s))  
         interpolation_func = interp1d(x_original, u1_opt, kind='linear')
         
-        # x_original_q1 = np.linspace(0, 1, len(q1_opt)) 
-        # x_target_q1 = np.linspace(0, 1, int(_max_episode_length_s))  
-        # interpolation_func_q1 = interp1d(x_original_q1, q1_opt, kind='linear')
-        # q1_opt = interpolation_func_q1(x_target_q1) 
+        x_original_q1 = np.linspace(0, 1, len(q1_opt)) 
+        x_target_q1 = np.linspace(0, 1, int(_max_episode_length_s))  
+        interpolation_func_q1 = interp1d(x_original_q1, q1_opt, kind='linear')
+        q1_opt = interpolation_func_q1(x_target_q1) 
 
         u1_opt = interpolation_func(x_target)
     
-        # return u1_opt, q1_opt
-        return u1_opt
+        return u1_opt, q1_opt
+        # return u1_opt
         
     else:
         print('\n')
