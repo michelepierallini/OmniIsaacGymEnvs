@@ -15,6 +15,8 @@ git add omniisaacgymenvs/tasks/fishing_rod_real_pos_2_cv_model_based_pos.py
 git add omniisaacgymenvs/cfg/train/FishingRodPosDueCVMBPosPPO.yaml
 git add omniisaacgymenvs/cfg/task/FishingRodPosDueCVMBPos.yaml
 
+git add omniisaacgymenvs/tasks/plot_from_tensorboard.py
+
 git add my_push.sh 
 git add .gitignore
 
