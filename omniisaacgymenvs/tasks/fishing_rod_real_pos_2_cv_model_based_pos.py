@@ -55,9 +55,6 @@ class FishingRodTaskPosDueCVModelBasedPos(RLTask):
         self.gravity = torch.tensor(self._task_cfg["sim"]["gravity"][2], device=self._device)
         self.WANNA_MODEL_BASED_HELP_DUMMY = False
         amp = self._task_cfg["env"]["initState"]["ampK"] 
-        
-        # 2BeTested: FishingRodPos_X_010_pos_new_2_Kpiu_MB
-        # k_ii = 2.0 * amp, d_ii = 2.0 * amp 
        
         ## FishingRodPos_X_009_pos_new_2_Kpiu_MB
         k_ii = amp * torch.tensor([0.0, 34.61, 30.61, 26.84, 17.203, 11.9, 10.99,
@@ -186,9 +183,7 @@ class FishingRodTaskPosDueCVModelBasedPos(RLTask):
                                                     _max_episode_length_s=self._max_episode_length_s,
                                                     vel_des=vel_d)
         
-        # self.q1_model_based = -np.array(self.q1_model_based) # (_n_envs, time)
-        # self.q1_model_based = np.array(self.q1_model_based) # (_n_envs, time)
-        
+        self.q1_model_based = -np.array(self.q1_model_based) # (_n_envs, time)        
         self.q1_model_based_torch = torch.tensor(self.q1_model_based, dtype=torch.float, device=self._device).view(1, -1).repeat(self._num_envs, 1)
                       
         print('\n')
