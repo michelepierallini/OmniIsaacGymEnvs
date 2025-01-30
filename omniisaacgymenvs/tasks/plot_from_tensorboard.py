@@ -29,16 +29,14 @@ def plot_tensorboard_data(logdirs, tags, output_folder,
                           smoothing_weight=0.6,
                           threshold=3,
                           log_names=None,
-                          size_1=9, size_2=7):
+                          size_1=9, size_2=7,
+                          max_data_points=None):  # New parameter added here
     """Extracts data from TensorBoard logs and plots it using the specified style.
 
     Args:
-        logdirs (list): List of paths to TensorBoard log directories.
-        tags (list): List of tags (e.g., ['loss', 'accuracy']) to extract and plot.
-        output_folder (str): Folder to save the plots.
-        log_names (list): Names for each logdir to use in the legend.
+        max_data_points (int, optional): Number of data points to plot for each log. 
+            If None, plots all data.
     """
-
     # rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
     # rc('text', usetex=True)
     # plt.rcParams['text.usetex'] = True
@@ -69,6 +67,11 @@ def plot_tensorboard_data(logdirs, tags, output_folder,
             steps = [event.step for event in scalar_events]
             values = [event.value for event in scalar_events]
             
+            # Apply data limit if specified
+            if max_data_points is not None:
+                steps = steps[:max_data_points]
+                values = values[:max_data_points]
+            
             # Process data
             if want_filter:
                 values = filter_outliers(values, threshold=threshold)
@@ -79,29 +82,29 @@ def plot_tensorboard_data(logdirs, tags, output_folder,
             plt.plot(steps, values, linewidth=label_width, linestyle='-', label=log_label)
 
         # Configure plot
-        plt.xlabel(r'Time\,\, [s]', fontsize=font_size)
-        plt.ylabel(r'' + tag.replace('_', r'\,\,') + r'', fontsize=font_size)
+        plt.xlabel(r'Epoch', fontsize=font_size)
+        plt.ylabel(r'' + tag.split('/')[-1].replace('_', r'\,\,') + r'', fontsize=font_size)
         plt.legend(fontsize=font_size)
         plt.grid()
         plt.tick_params(labelsize=font_size)
         plt.tight_layout()
 
         # Save plot
-        tag_basename = tag.split('/')[-1]  # Get last part of tag path
+        tag_basename = tag.split('/')[-1]
         output_path = os.path.join(output_folder, f'{tag_basename}.{type_format}')
         plt.savefig(output_path, format=type_format)
         plt.close()
         print(f"Plot saved to {output_path}")
 
 if __name__ == "__main__":
-    # Example usage
+    # Example usage with data limitation
     logdirs = [
         "../runs/FishingRodPos_X_009_pos_new_2_Kpiu/summaries/",
         "../runs/FishingRodPos_X_009_pos_new_2_Kpiu_MB/summaries/",
         "../runs/FishingRodPos_X_009_pos_new_2_Kpiu_MB_pos/summaries/"
     ]
     tags = ["Episode/rew_err_pos", "Episode/rew_err_vel", "rewards/iter"]
-    log_names = ["Kpiu", "MB", "MB_pos"]  # Custom names for each logdir
+    log_names = ["Kpiu", "MB", "MB_pos"]
     output_folder = "comparison_plots"
 
     plot_tensorboard_data(
@@ -110,5 +113,6 @@ if __name__ == "__main__":
         output_folder=output_folder,
         log_names=log_names,
         want_smooth=True,
-        smoothing_weight=0.6
+        smoothing_weight=0.6,
+        max_data_points=500  # New parameter usage here
     )
