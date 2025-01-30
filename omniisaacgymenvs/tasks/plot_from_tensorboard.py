@@ -30,34 +30,38 @@ def plot_tensorboard_data(logdirs, tags, output_folder,
                           threshold=3,
                           log_names=None,
                           size_1=9, size_2=7,
-                          max_data_points=None):  # New parameter added here
-    """Extracts data from TensorBoard logs and plots it using the specified style.
+                          title=None,
+                          max_data_points=None):
+    """Extracts and plots TensorBoard data with per-log data limits.
 
     Args:
-        max_data_points (int, optional): Number of data points to plot for each log. 
-            If None, plots all data.
+        max_data_points (int, list, optional): Number of data points to plot per log. 
+            Can be integer (same for all) or list matching logdirs length.
     """
-    # rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
-    # rc('text', usetex=True)
-    # plt.rcParams['text.usetex'] = True
+    # Set up matplotlib style
+    rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+    rc('text', usetex=True)
+    plt.rcParams['text.usetex'] = True
 
-    # Handle log names
+    # Validate inputs
     if log_names is None:
         log_names = [f'Log {i+1}' for i in range(len(logdirs))]
     else:
-        assert len(log_names) == len(logdirs), "log_names must have same length as logdirs"
+        assert len(log_names) == len(logdirs), "log_names must match logdirs length"
+    
+    if isinstance(max_data_points, list):
+        assert len(max_data_points) == len(logdirs), "max_data_points list must match logdirs length"
 
     os.makedirs(output_folder, exist_ok=True)
 
     for tag in tags:
         plt.figure(figsize=(size_1, size_2))
         
-        for logdir, log_label in zip(logdirs, log_names):
-            # Load event data for this logdir
+        for i, (logdir, log_label) in enumerate(zip(logdirs, log_names)):
+            # Load event data
             event_acc = EventAccumulator(logdir)
             event_acc.Reload()
             
-            # Extract scalar data
             try:
                 scalar_events = event_acc.Scalars(tag)
             except KeyError:
@@ -67,45 +71,51 @@ def plot_tensorboard_data(logdirs, tags, output_folder,
             steps = [event.step for event in scalar_events]
             values = [event.value for event in scalar_events]
             
-            # Apply data limit if specified
+            # Apply data limit
             if max_data_points is not None:
-                steps = steps[:max_data_points]
-                values = values[:max_data_points]
+                current_max = max_data_points[i] if isinstance(max_data_points, list) else max_data_points
+                steps = steps[:current_max]
+                values = values[:current_max]
             
             # Process data
             if want_filter:
                 values = filter_outliers(values, threshold=threshold)
             if want_smooth:
                 values = smooth_data(values, smoothing_weight=smoothing_weight)
-            
-            # Plot data
+                
+            title_fig = titles[i]
             plt.plot(steps, values, linewidth=label_width, linestyle='-', label=log_label)
 
         # Configure plot
-        plt.xlabel(r'Epoch', fontsize=font_size)
-        plt.ylabel(r'' + tag.split('/')[-1].replace('_', r'\,\,') + r'', fontsize=font_size)
+        tag_basename = tag.split('/')[-1]
+        plt.xlabel(r'$\mathbf{Epoch}$', fontsize=font_size)
+        if title is None:
+            plt.ylabel(r'$\mathbf{' + tag_basename.replace('_', r'\,\,') + r'}$', fontsize=font_size)
+        else:
+            plt.ylabel(r'$\mathbf{' + title_fig + r'}$', fontsize=font_size)
         plt.legend(fontsize=font_size)
         plt.grid()
         plt.tick_params(labelsize=font_size)
         plt.tight_layout()
 
         # Save plot
-        tag_basename = tag.split('/')[-1]
         output_path = os.path.join(output_folder, f'{tag_basename}.{type_format}')
         plt.savefig(output_path, format=type_format)
         plt.close()
         print(f"Plot saved to {output_path}")
 
 if __name__ == "__main__":
-    # Example usage with data limitation
+    
     logdirs = [
         "../runs/FishingRodPos_X_009_pos_new_2_Kpiu/summaries/",
         "../runs/FishingRodPos_X_009_pos_new_2_Kpiu_MB/summaries/",
         "../runs/FishingRodPos_X_009_pos_new_2_Kpiu_MB_pos/summaries/"
     ]
     tags = ["Episode/rew_err_pos", "Episode/rew_err_vel", "rewards/iter"]
-    log_names = ["Kpiu", "MB", "MB_pos"]
+    titles = [r"Error Pos. Tip [m]", r"Error Vel. [m/s]", r"Reward"]
+    log_names = [r"Model-Free", r"Opt. Init Torque", r"Opt. Init Pos."]
     output_folder = "comparison_plots"
+    max_data_points = [400, 263, 600] 
 
     plot_tensorboard_data(
         logdirs=logdirs,
@@ -114,5 +124,6 @@ if __name__ == "__main__":
         log_names=log_names,
         want_smooth=True,
         smoothing_weight=0.6,
-        max_data_points=500  # New parameter usage here
+        max_data_points=max_data_points, 
+        title=titles
     )
